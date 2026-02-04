@@ -114,27 +114,27 @@ export default function ClientDetailPage() {
   
   // Fetch financial details for selected month
   const { data: monthlyHousingSupport } = useQuery<HousingSupport>({
-    queryKey: ["/api/housing-supports", { clientMonthId: currentMonthRecord?.id }],
+    queryKey: ["/api/client-months", currentMonthRecord?.id, "housing-support"],
     enabled: !!currentMonthRecord?.id,
   });
   
   const { data: monthlyRent } = useQuery<RentPayment>({
-    queryKey: ["/api/rent-payments", { clientMonthId: currentMonthRecord?.id }],
+    queryKey: ["/api/client-months", currentMonthRecord?.id, "rent-payment"],
     enabled: !!currentMonthRecord?.id,
   });
   
   const { data: monthlyExpenses } = useQuery<any[]>({
-    queryKey: ["/api/expenses", { clientMonthId: currentMonthRecord?.id }],
+    queryKey: ["/api/client-months", currentMonthRecord?.id, "expenses"],
     enabled: !!currentMonthRecord?.id,
   });
   
   const { data: monthlyLth } = useQuery<any[]>({
-    queryKey: ["/api/lth-payments", { clientMonthId: currentMonthRecord?.id }],
+    queryKey: ["/api/client-months", currentMonthRecord?.id, "lth-payments"],
     enabled: !!currentMonthRecord?.id,
   });
   
   const { data: monthlyPoolFund } = useQuery<any>({
-    queryKey: ["/api/pool-funds", { clientMonthId: currentMonthRecord?.id }],
+    queryKey: ["/api/client-months", currentMonthRecord?.id, "pool-fund"],
     enabled: !!currentMonthRecord?.id,
   });
 
