@@ -12,6 +12,7 @@ import ClientDetailPage from "@/pages/client-detail";
 import ClientFormPage from "@/pages/client-form";
 import BulkUpdatesPage from "@/pages/bulk-updates";
 import ReportsPage from "@/pages/reports";
+import PoolFundPage from "@/pages/pool-fund";
 import SettingsPage from "@/pages/settings";
 import UsersPage from "@/pages/users";
 import AuditLogsPage from "@/pages/audit-logs";
@@ -97,6 +98,10 @@ function Router() {
       
       <Route path="/reports">
         <ProtectedRoute component={ReportsPage} />
+      </Route>
+      
+      <Route path="/pool-fund">
+        <ProtectedRoute component={PoolFundPage} />
       </Route>
       
       <Route path="/settings">

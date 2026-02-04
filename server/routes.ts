@@ -308,6 +308,102 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // Pool Fund Summary
+  // ============================================
+  app.get("/api/pool-fund-summary", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      const year = parseInt(req.query.year as string);
+      const month = req.query.month ? parseInt(req.query.month as string) : null;
+
+      if (isNaN(year)) {
+        return res.status(400).json({ error: "Year is required" });
+      }
+
+      const clients = await storage.getClients();
+      const counties = await storage.getCounties();
+      const contributions: any[] = [];
+      
+      let totalPoolFund = 0;
+      let positiveContributors = 0;
+      let negativeContributors = 0;
+
+      for (const client of clients) {
+        // Get all client months for this year (or specific month)
+        const clientMonths = await storage.getClientMonths(client.id);
+        const relevantMonths = clientMonths.filter(cm => {
+          if (month) {
+            return cm.year === year && cm.month === month;
+          }
+          return cm.year === year;
+        });
+
+        if (relevantMonths.length === 0) continue;
+
+        let clientHousingSupport = 0;
+        let clientRentPaid = 0;
+        let clientExpenses = 0;
+
+        for (const cm of relevantMonths) {
+          // Get housing support
+          const hs = await storage.getHousingSupport(cm.id);
+          if (hs) {
+            clientHousingSupport += parseFloat(hs.amount || "0");
+          }
+
+          // Get rent payment
+          const rent = await storage.getRentPayment(cm.id);
+          if (rent) {
+            clientRentPaid += parseFloat(rent.paidAmount || "0");
+          }
+
+          // Get expenses
+          const expenses = await storage.getExpenses(cm.id);
+          if (expenses) {
+            clientExpenses += expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+          }
+        }
+
+        // Calculate pool amount: Housing Support - (Rent + Expenses)
+        const poolAmount = clientHousingSupport - (clientRentPaid + clientExpenses);
+        
+        // Only include clients who have some financial data
+        if (clientHousingSupport > 0 || clientRentPaid > 0 || clientExpenses > 0) {
+          contributions.push({
+            clientId: client.id,
+            clientName: client.fullName,
+            county: counties.find(c => c.id === client.countyId)?.name || "-",
+            housingSupport: clientHousingSupport,
+            rentPaid: clientRentPaid,
+            expenses: clientExpenses,
+            poolAmount,
+          });
+
+          totalPoolFund += poolAmount;
+          if (poolAmount >= 0) {
+            positiveContributors++;
+          } else {
+            negativeContributors++;
+          }
+        }
+      }
+
+      // Sort by pool amount descending
+      contributions.sort((a, b) => b.poolAmount - a.poolAmount);
+
+      res.json({
+        totalPoolFund,
+        totalContributors: contributions.length,
+        positiveContributors,
+        negativeContributors,
+        contributions,
+      });
+    } catch (error) {
+      console.error("Pool fund summary error:", error);
+      res.status(500).json({ error: "Failed to generate pool fund summary" });
+    }
+  });
+
+  // ============================================
   // Users
   // ============================================
   app.get("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthenticatedRequest, res) => {

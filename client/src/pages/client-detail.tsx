@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -31,8 +31,11 @@ import {
   Calendar,
   Upload,
   Loader2,
-  ExternalLink,
+  Eye,
   User,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
 } from "lucide-react";
 import type {
   Client,
@@ -57,6 +60,16 @@ export default function ClientDetailPage() {
   const [selectedDocType, setSelectedDocType] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Document viewer state
+  const [viewingDocument, setViewingDocument] = useState<ClientDocument | null>(null);
+  const [documentBlobUrl, setDocumentBlobUrl] = useState<string | null>(null);
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+  
+  // Financials month navigation state
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
@@ -88,6 +101,37 @@ export default function ClientDetailPage() {
   const { data: clientMonths } = useQuery<ClientMonth[]>({
     queryKey: ["/api/clients", clientId, "months"],
     enabled: !!clientId,
+  });
+  
+  // Find current month record from clientMonths
+  const currentMonthRecord = clientMonths?.find(
+    (m) => m.year === selectedYear && m.month === selectedMonth
+  );
+  
+  // Fetch financial details for selected month
+  const { data: monthlyHousingSupport } = useQuery<HousingSupport>({
+    queryKey: ["/api/housing-supports", { clientMonthId: currentMonthRecord?.id }],
+    enabled: !!currentMonthRecord?.id,
+  });
+  
+  const { data: monthlyRent } = useQuery<RentPayment>({
+    queryKey: ["/api/rent-payments", { clientMonthId: currentMonthRecord?.id }],
+    enabled: !!currentMonthRecord?.id,
+  });
+  
+  const { data: monthlyExpenses } = useQuery<any[]>({
+    queryKey: ["/api/expenses", { clientMonthId: currentMonthRecord?.id }],
+    enabled: !!currentMonthRecord?.id,
+  });
+  
+  const { data: monthlyLth } = useQuery<any[]>({
+    queryKey: ["/api/lth-payments", { clientMonthId: currentMonthRecord?.id }],
+    enabled: !!currentMonthRecord?.id,
+  });
+  
+  const { data: monthlyPoolFund } = useQuery<any>({
+    queryKey: ["/api/pool-funds", { clientMonthId: currentMonthRecord?.id }],
+    enabled: !!currentMonthRecord?.id,
   });
 
   const { data: history } = useQuery<ClientHistory[]>({
@@ -135,6 +179,84 @@ export default function ClientDetailPage() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  // Document viewing - fetch with auth and display in modal
+  const handleViewDocument = async (doc: ClientDocument) => {
+    setViewingDocument(doc);
+    setIsLoadingDocument(true);
+    
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(doc.fileUrl, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to load document");
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setDocumentBlobUrl(blobUrl);
+    } catch (error) {
+      toast({
+        title: "Failed to load document",
+        description: "Could not retrieve the document. Please try again.",
+        variant: "destructive",
+      });
+      setViewingDocument(null);
+    } finally {
+      setIsLoadingDocument(false);
+    }
+  };
+
+  const closeDocumentViewer = () => {
+    if (documentBlobUrl) {
+      URL.revokeObjectURL(documentBlobUrl);
+    }
+    setViewingDocument(null);
+    setDocumentBlobUrl(null);
+  };
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (documentBlobUrl) {
+        URL.revokeObjectURL(documentBlobUrl);
+      }
+    };
+  }, [documentBlobUrl]);
+
+  // Month navigation functions
+  const navigateToPreviousMonth = () => {
+    if (selectedMonth === 1) {
+      setSelectedMonth(12);
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedMonth(selectedMonth - 1);
+    }
+  };
+
+  const navigateToNextMonth = () => {
+    if (selectedMonth === 12) {
+      setSelectedMonth(1);
+      setSelectedYear(selectedYear + 1);
+    } else {
+      setSelectedMonth(selectedMonth + 1);
+    }
+  };
+
+  // Calculate pool fund for display
+  const calculatePoolFund = () => {
+    const housingSupport = parseFloat(monthlyHousingSupport?.amount || "0");
+    const rentPaid = parseFloat(monthlyRent?.paidAmount || "0");
+    const totalExpenses = (monthlyExpenses || []).reduce(
+      (sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0
+    );
+    return housingSupport - (rentPaid + totalExpenses);
   };
 
   const handleDocumentUpload = async () => {
@@ -490,11 +612,14 @@ export default function ClientDetailPage() {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" asChild>
-                              <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="mr-1 h-3 w-3" />
-                                View
-                              </a>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleViewDocument(doc)}
+                              data-testid={`button-view-document-${doc.id}`}
+                            >
+                              <Eye className="mr-1 h-3 w-3" />
+                              View
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -508,54 +633,215 @@ export default function ClientDetailPage() {
                 )}
               </CardContent>
             </Card>
+            
+            {/* Document Viewer Modal */}
+            <Dialog open={!!viewingDocument} onOpenChange={(open) => !open && closeDocumentViewer()}>
+              <DialogContent className="max-w-4xl max-h-[90vh]">
+                <DialogHeader>
+                  <DialogTitle>Document Viewer</DialogTitle>
+                  <DialogDescription>
+                    {viewingDocument && (
+                      <>
+                        {getDocumentTypeBadge(viewingDocument.documentType)}
+                        <span className="ml-2 text-sm">
+                          Uploaded {new Date(viewingDocument.uploadedAt).toLocaleDateString()}
+                        </span>
+                      </>
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <div 
+                  className="flex items-center justify-center min-h-[400px] bg-muted rounded-lg overflow-hidden"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  {isLoadingDocument ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Loading document...</p>
+                    </div>
+                  ) : documentBlobUrl ? (
+                    <img 
+                      src={documentBlobUrl} 
+                      alt="Document" 
+                      className="max-w-full max-h-[60vh] object-contain select-none"
+                      style={{ pointerEvents: "none" }}
+                      draggable={false}
+                      data-testid="image-document-viewer"
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">Unable to display document</p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="financials">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Monthly Financial Records</CardTitle>
-                <CardDescription>Housing support, rent, and expenses by month</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">Monthly Financial Records</CardTitle>
+                  <CardDescription>Housing support, rent, expenses, and pool fund by month</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={navigateToPreviousMonth}
+                    data-testid="button-prev-month"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-2 min-w-[180px] justify-center">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{formatMonth(selectedYear, selectedMonth)}</span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={navigateToNextMonth}
+                    data-testid="button-next-month"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                {clientMonths && clientMonths.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Period</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {clientMonths.map((month) => (
-                        <TableRow key={month.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {formatMonth(month.year, month.month)}
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-sm text-muted-foreground">Housing Support</div>
+                        <div className="text-2xl font-bold text-green-600" data-testid="text-housing-support-amount">
+                          ${parseFloat(monthlyHousingSupport?.amount || "0").toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-sm text-muted-foreground">Rent Paid</div>
+                        <div className="text-2xl font-bold" data-testid="text-rent-paid-amount">
+                          ${parseFloat(monthlyRent?.paidAmount || "0").toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-sm text-muted-foreground">Total Expenses</div>
+                        <div className="text-2xl font-bold" data-testid="text-expenses-amount">
+                          ${(monthlyExpenses || []).reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0).toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-sm text-muted-foreground">Pool Fund</div>
+                        <div 
+                          className={`text-2xl font-bold ${calculatePoolFund() >= 0 ? 'text-blue-600' : 'text-red-600'}`}
+                          data-testid="text-pool-fund-amount"
+                        >
+                          ${calculatePoolFund().toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Status:</span>
+                    {currentMonthRecord ? (
+                      <Badge variant={currentMonthRecord.isLocked ? "secondary" : "default"}>
+                        {currentMonthRecord.isLocked ? "Locked" : "Open for Editing"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">No Record</Badge>
+                    )}
+                  </div>
+
+                  {/* Detailed Sections */}
+                  <div className="grid gap-6 md:grid-cols-2">
+                    {/* Rent Details */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <Home className="h-4 w-4" />
+                        Rent Details
+                      </h4>
+                      {monthlyRent ? (
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Expected Amount</span>
+                            <span>${parseFloat(monthlyRent.expectedAmount || "0").toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Amount Paid</span>
+                            <span>${parseFloat(monthlyRent.paidAmount || "0").toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Paid Date</span>
+                            <span>{monthlyRent.paidDate ? new Date(monthlyRent.paidDate).toLocaleDateString() : "-"}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No rent data for this month</p>
+                      )}
+                    </div>
+                    
+                    {/* Expenses List */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Expenses ({(monthlyExpenses || []).length})
+                      </h4>
+                      {monthlyExpenses && monthlyExpenses.length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-auto">
+                          {monthlyExpenses.map((expense: any) => (
+                            <div key={expense.id} className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">{expense.description || "Expense"}</span>
+                              <span>${parseFloat(expense.amount || "0").toFixed(2)}</span>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={month.isLocked ? "secondary" : "default"}>
-                              {month.isLocked ? "Locked" : "Open"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/clients/${clientId}/months/${month.id}`}>
-                                View Details
-                              </Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No financial records yet
-                  </p>
-                )}
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No expenses for this month</p>
+                      )}
+                    </div>
+                    
+                    {/* LTH Payments */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        LTH Payments ({(monthlyLth || []).length})
+                      </h4>
+                      {monthlyLth && monthlyLth.length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-auto">
+                          {monthlyLth.map((lth: any) => (
+                            <div key={lth.id} className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">
+                                {lth.paymentDate ? new Date(lth.paymentDate).toLocaleDateString() : "Payment"}
+                              </span>
+                              <span>${parseFloat(lth.amount || "0").toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No LTH payments for this month</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Action Button */}
+                  {currentMonthRecord && (
+                    <div className="pt-4 border-t">
+                      <Button asChild variant="outline" data-testid="button-edit-financials">
+                        <Link href={`/clients/${clientId}/months/${currentMonthRecord.id}`}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Financial Details
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

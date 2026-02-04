@@ -24,6 +24,7 @@ import {
   FileText,
   LogOut,
   Building2,
+  Wallet,
 } from "lucide-react";
 
 export function AppSidebar() {
@@ -35,6 +36,7 @@ export function AppSidebar() {
     { title: "Clients", url: "/clients", icon: Users },
     { title: "Bulk Updates", url: "/bulk-updates", icon: FileSpreadsheet },
     { title: "Reports", url: "/reports", icon: BarChart3 },
+    { title: "Pool Fund", url: "/pool-fund", icon: Wallet },
   ];
 
   const adminMenuItems = [
