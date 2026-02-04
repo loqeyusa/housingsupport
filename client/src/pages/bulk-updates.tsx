@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { FileSpreadsheet, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { FileSpreadsheet, Loader2, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Client, County } from "@shared/schema";
 
 type FinancialType = "housing_support" | "rent" | "expense" | "lth";
@@ -25,6 +35,11 @@ interface BulkUpdateData {
   clientIds: string[];
   clientAmounts: Record<string, string>;
   useUniformAmount: boolean;
+}
+
+interface CurrentAmountData {
+  currentAmount: number;
+  hasExistingData: boolean;
 }
 
 export default function BulkUpdatesPage() {
@@ -40,6 +55,8 @@ export default function BulkUpdatesPage() {
   const [uniformAmount, setUniformAmount] = useState("");
   const [clientAmounts, setClientAmounts] = useState<Record<string, string>>({});
   const [useUniformAmount, setUseUniformAmount] = useState(true);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [clientsWithExistingData, setClientsWithExistingData] = useState<string[]>([]);
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -49,12 +66,30 @@ export default function BulkUpdatesPage() {
     queryKey: ["/api/counties"],
   });
 
+  const { data: currentAmounts, refetch: refetchCurrentAmounts } = useQuery<Record<string, CurrentAmountData>>({
+    queryKey: ["/api/bulk-updates/current-amounts", year, month, financialType],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`/api/bulk-updates/current-amounts?year=${year}&month=${month}&financialType=${financialType}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch current amounts");
+      return res.json();
+    },
+  });
+
+  // Refetch current amounts when period or type changes
+  useEffect(() => {
+    refetchCurrentAmounts();
+  }, [year, month, financialType, refetchCurrentAmounts]);
+
   const bulkUpdateMutation = useMutation({
     mutationFn: async (data: BulkUpdateData) => {
       return apiRequest("POST", "/api/bulk-updates", data);
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bulk-updates/current-amounts"] });
       toast({
         title: "Bulk update completed",
         description: `Successfully updated ${data.updatedCount} records.`,
@@ -74,6 +109,8 @@ export default function BulkUpdatesPage() {
     setSelectedClients(new Set());
     setUniformAmount("");
     setClientAmounts({});
+    setClientsWithExistingData([]);
+    refetchCurrentAmounts();
   };
 
   const filteredClients = clients?.filter((client) => {
@@ -109,7 +146,7 @@ export default function BulkUpdatesPage() {
     }));
   };
 
-  const handleSubmit = () => {
+  const checkAndSubmit = () => {
     if (selectedClients.size === 0) {
       toast({
         title: "No clients selected",
@@ -128,6 +165,20 @@ export default function BulkUpdatesPage() {
       return;
     }
 
+    // Check for clients with existing data
+    const clientsWithData = Array.from(selectedClients).filter(
+      clientId => currentAmounts?.[clientId]?.hasExistingData
+    );
+
+    if (clientsWithData.length > 0) {
+      setClientsWithExistingData(clientsWithData);
+      setShowConfirmDialog(true);
+    } else {
+      performUpdate();
+    }
+  };
+
+  const performUpdate = () => {
     const data: BulkUpdateData = {
       year,
       month,
@@ -139,6 +190,11 @@ export default function BulkUpdatesPage() {
     };
 
     bulkUpdateMutation.mutate(data);
+    setShowConfirmDialog(false);
+  };
+
+  const getClientName = (clientId: string) => {
+    return clients?.find(c => c.id === clientId)?.fullName || "Unknown";
   };
 
   const getCountyName = (countyId: string | null) => {
@@ -315,7 +371,7 @@ export default function BulkUpdatesPage() {
 
               <Button
                 className="w-full"
-                onClick={handleSubmit}
+                onClick={checkAndSubmit}
                 disabled={bulkUpdateMutation.isPending || selectedClients.size === 0}
                 data-testid="button-submit-bulk-update"
               >
@@ -358,38 +414,55 @@ export default function BulkUpdatesPage() {
                     <TableHead className="w-12"></TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>County</TableHead>
-                    {!useUniformAmount && <TableHead>Amount</TableHead>}
+                    <TableHead className="text-right">Current Amount</TableHead>
+                    {!useUniformAmount && <TableHead>New Amount</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClients?.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedClients.has(client.id)}
-                          onCheckedChange={() => handleSelectClient(client.id)}
-                          data-testid={`checkbox-client-${client.id}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">{client.fullName}</TableCell>
-                      <TableCell>{getCountyName(client.countyId)}</TableCell>
-                      {!useUniformAmount && (
+                  {filteredClients?.map((client) => {
+                    const clientData = currentAmounts?.[client.id];
+                    const hasExisting = clientData?.hasExistingData;
+                    return (
+                      <TableRow key={client.id} className={hasExisting ? "bg-yellow-50 dark:bg-yellow-900/10" : ""}>
                         <TableCell>
-                          <Input
-                            type="number"
-                            placeholder="0.00"
-                            className="w-28"
-                            value={clientAmounts[client.id] || ""}
-                            onChange={(e) =>
-                              handleClientAmountChange(client.id, e.target.value)
-                            }
-                            disabled={!selectedClients.has(client.id)}
-                            data-testid={`input-amount-${client.id}`}
+                          <Checkbox
+                            checked={selectedClients.has(client.id)}
+                            onCheckedChange={() => handleSelectClient(client.id)}
+                            data-testid={`checkbox-client-${client.id}`}
                           />
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {client.fullName}
+                            {hasExisting && (
+                              <Badge variant="outline" className="text-yellow-600 border-yellow-600" data-testid={`badge-existing-${client.id}`}>
+                                Has Data
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getCountyName(client.countyId)}</TableCell>
+                        <TableCell className="text-right font-mono" data-testid={`text-current-amount-${client.id}`}>
+                          ${(clientData?.currentAmount ?? 0).toFixed(2)}
+                        </TableCell>
+                        {!useUniformAmount && (
+                          <TableCell>
+                            <Input
+                              type="number"
+                              placeholder="0.00"
+                              className="w-28"
+                              value={clientAmounts[client.id] || ""}
+                              onChange={(e) =>
+                                handleClientAmountChange(client.id, e.target.value)
+                              }
+                              disabled={!selectedClients.has(client.id)}
+                              data-testid={`input-amount-${client.id}`}
+                            />
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               {(!filteredClients || filteredClients.length === 0) && (
@@ -400,6 +473,53 @@ export default function BulkUpdatesPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Confirmation Dialog for Existing Data */}
+        <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <AlertDialogContent data-testid="dialog-confirm-update">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                Clients Already Have Data
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p>
+                    The following {clientsWithExistingData.length} client(s) already have{" "}
+                    {financialTypes.find(t => t.value === financialType)?.label.toLowerCase()} data for{" "}
+                    {months.find(m => m.value === month)?.label} {year}:
+                  </p>
+                  <div className="max-h-40 overflow-auto rounded border p-2 bg-muted/50">
+                    <ul className="space-y-1 text-sm">
+                      {clientsWithExistingData.map(clientId => {
+                        const clientData = currentAmounts?.[clientId];
+                        return (
+                          <li key={clientId} className="flex justify-between">
+                            <span>{getClientName(clientId)}</span>
+                            <span className="font-mono">${(clientData?.currentAmount ?? 0).toFixed(2)}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  <p className="text-yellow-600 font-medium">
+                    Proceeding will update their existing records with the new values.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-update">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={performUpdate}
+                className="bg-yellow-600 hover:bg-yellow-700"
+                data-testid="button-confirm-update"
+              >
+                Proceed with Update
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

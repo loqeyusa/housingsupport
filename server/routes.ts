@@ -128,6 +128,72 @@ export async function registerRoutes(
   // ============================================
   // Bulk Updates
   // ============================================
+  
+  // Get current financial amounts for clients for a specific period
+  app.get("/api/bulk-updates/current-amounts", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { year, month, financialType } = req.query;
+      
+      if (!year || !month || !financialType) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+      
+      const clients = await storage.getClients();
+      const result: Record<string, { currentAmount: number; hasExistingData: boolean }> = {};
+      
+      for (const client of clients) {
+        const clientMonth = await storage.getClientMonthByPeriod(
+          client.id, 
+          parseInt(year as string), 
+          parseInt(month as string)
+        );
+        
+        let currentAmount = 0;
+        let hasExistingData = false;
+        
+        if (clientMonth) {
+          switch (financialType) {
+            case "housing_support":
+              const hs = await storage.getHousingSupport(clientMonth.id);
+              if (hs) {
+                currentAmount = parseFloat(hs.amount) || 0;
+                hasExistingData = true;
+              }
+              break;
+            case "rent":
+              const rent = await storage.getRentPayment(clientMonth.id);
+              if (rent) {
+                currentAmount = parseFloat(rent.paidAmount || "0") || 0;
+                hasExistingData = true;
+              }
+              break;
+            case "expense":
+              const expenses = await storage.getExpenses(clientMonth.id);
+              if (expenses && expenses.length > 0) {
+                currentAmount = expenses.reduce((sum: number, e: any) => sum + (parseFloat(e.amount) || 0), 0);
+                hasExistingData = true;
+              }
+              break;
+            case "lth":
+              const lthPayments = await storage.getLthPayments(clientMonth.id);
+              if (lthPayments && lthPayments.length > 0) {
+                currentAmount = lthPayments.reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
+                hasExistingData = true;
+              }
+              break;
+          }
+        }
+        
+        result[client.id] = { currentAmount, hasExistingData };
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching current amounts:", error);
+      res.status(500).json({ error: "Failed to fetch current amounts" });
+    }
+  });
+  
   app.post("/api/bulk-updates", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const { year, month, financialType, amount, clientIds, clientAmounts, useUniformAmount } = req.body;
