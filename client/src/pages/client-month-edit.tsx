@@ -25,9 +25,9 @@ export default function ClientMonthEditPage() {
   const { toast } = useToast();
 
   const [housingSupport, setHousingSupport] = useState({ id: "", amount: "" });
-  const [rentPayment, setRentPayment] = useState({ id: "", amount: "", paymentMethodId: "" });
-  const [lthPayments, setLthPayments] = useState<Array<{ id: string; amount: string; description: string; isNew?: boolean }>>([]);
-  const [expenses, setExpenses] = useState<Array<{ id: string; amount: string; categoryId: string; description: string; isNew?: boolean }>>([]);
+  const [rentPayment, setRentPayment] = useState({ id: "", paidAmount: "" });
+  const [lthPayments, setLthPayments] = useState<Array<{ id: string; amount: string; isNew?: boolean }>>([]);
+  const [expenses, setExpenses] = useState<Array<{ id: string; amount: string; categoryId: string; notes: string; isNew?: boolean }>>([]);
 
   const { data: clientMonth, isLoading: monthLoading } = useQuery<{
     id: string;
@@ -52,23 +52,19 @@ export default function ClientMonthEditPage() {
     enabled: !!monthId,
   });
 
-  const { data: rentPaymentData } = useQuery<{ id: string; amount: string; paymentMethodId: string } | null>({
+  const { data: rentPaymentData } = useQuery<{ id: string; paidAmount: string } | null>({
     queryKey: ["/api/client-months", monthId, "rent-payment"],
     enabled: !!monthId,
   });
 
-  const { data: lthPaymentsData } = useQuery<Array<{ id: string; amount: string; description: string }>>({
+  const { data: lthPaymentsData } = useQuery<Array<{ id: string; amount: string }>>({
     queryKey: ["/api/client-months", monthId, "lth-payments"],
     enabled: !!monthId,
   });
 
-  const { data: expensesData } = useQuery<Array<{ id: string; amount: string; categoryId: string; description: string }>>({
+  const { data: expensesData } = useQuery<Array<{ id: string; amount: string; categoryId: string; notes: string }>>({
     queryKey: ["/api/client-months", monthId, "expenses"],
     enabled: !!monthId,
-  });
-
-  const { data: paymentMethods } = useQuery<Array<{ id: string; name: string }>>({
-    queryKey: ["/api/payment-methods"],
   });
 
   const { data: expenseCategories } = useQuery<Array<{ id: string; name: string }>>({
@@ -85,8 +81,7 @@ export default function ClientMonthEditPage() {
     if (rentPaymentData) {
       setRentPayment({
         id: rentPaymentData.id,
-        amount: rentPaymentData.amount || "",
-        paymentMethodId: rentPaymentData.paymentMethodId || "",
+        paidAmount: rentPaymentData.paidAmount || "",
       });
     }
   }, [rentPaymentData]);
@@ -99,7 +94,7 @@ export default function ClientMonthEditPage() {
 
   useEffect(() => {
     if (expensesData) {
-      setExpenses(expensesData.map(e => ({ ...e, amount: e.amount || "" })));
+      setExpenses(expensesData.map(e => ({ ...e, amount: e.amount || "", notes: e.notes || "" })));
     }
   }, [expensesData]);
 
@@ -119,11 +114,11 @@ export default function ClientMonthEditPage() {
   });
 
   const updateRentPaymentMutation = useMutation({
-    mutationFn: async (data: { id?: string; amount: string; paymentMethodId: string }) => {
+    mutationFn: async (data: { id?: string; paidAmount: string }) => {
       if (data.id) {
-        return apiRequest("PATCH", `/api/rent-payments/${data.id}`, { amount: data.amount, paymentMethodId: data.paymentMethodId });
+        return apiRequest("PATCH", `/api/rent-payments/${data.id}`, { paidAmount: data.paidAmount });
       } else {
-        return apiRequest("POST", "/api/rent-payments", { clientMonthId: monthId, amount: data.amount, paymentMethodId: data.paymentMethodId });
+        return apiRequest("POST", "/api/rent-payments", { clientMonthId: monthId, paidAmount: data.paidAmount });
       }
     },
     onSuccess: () => {
@@ -132,8 +127,8 @@ export default function ClientMonthEditPage() {
   });
 
   const createLthPaymentMutation = useMutation({
-    mutationFn: async (data: { amount: string; description: string }) => {
-      return apiRequest("POST", "/api/lth-payments", { clientMonthId: monthId, ...data });
+    mutationFn: async (data: { amount: string }) => {
+      return apiRequest("POST", "/api/lth-payments", { clientMonthId: monthId, amount: data.amount });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-months", monthId, "lth-payments"] });
@@ -141,8 +136,8 @@ export default function ClientMonthEditPage() {
   });
 
   const updateLthPaymentMutation = useMutation({
-    mutationFn: async (data: { id: string; amount: string; description: string }) => {
-      return apiRequest("PATCH", `/api/lth-payments/${data.id}`, { amount: data.amount, description: data.description });
+    mutationFn: async (data: { id: string; amount: string }) => {
+      return apiRequest("PATCH", `/api/lth-payments/${data.id}`, { amount: data.amount });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-months", monthId, "lth-payments"] });
@@ -159,8 +154,8 @@ export default function ClientMonthEditPage() {
   });
 
   const createExpenseMutation = useMutation({
-    mutationFn: async (data: { amount: string; categoryId: string; description: string }) => {
-      return apiRequest("POST", "/api/expenses", { clientMonthId: monthId, ...data });
+    mutationFn: async (data: { amount: string; categoryId: string; notes: string }) => {
+      return apiRequest("POST", "/api/expenses", { clientMonthId: monthId, amount: data.amount, categoryId: data.categoryId, notes: data.notes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-months", monthId, "expenses"] });
@@ -168,8 +163,8 @@ export default function ClientMonthEditPage() {
   });
 
   const updateExpenseMutation = useMutation({
-    mutationFn: async (data: { id: string; amount: string; categoryId: string; description: string }) => {
-      return apiRequest("PATCH", `/api/expenses/${data.id}`, { amount: data.amount, categoryId: data.categoryId, description: data.description });
+    mutationFn: async (data: { id: string; amount: string; categoryId: string; notes: string }) => {
+      return apiRequest("PATCH", `/api/expenses/${data.id}`, { amount: data.amount, categoryId: data.categoryId, notes: data.notes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-months", monthId, "expenses"] });
@@ -191,27 +186,26 @@ export default function ClientMonthEditPage() {
         await updateHousingSupportMutation.mutateAsync({ id: housingSupport.id || undefined, amount: housingSupport.amount });
       }
 
-      if (rentPayment.amount && rentPayment.paymentMethodId) {
+      if (rentPayment.paidAmount) {
         await updateRentPaymentMutation.mutateAsync({
           id: rentPayment.id || undefined,
-          amount: rentPayment.amount,
-          paymentMethodId: rentPayment.paymentMethodId,
+          paidAmount: rentPayment.paidAmount,
         });
       }
 
       for (const lth of lthPayments) {
         if (lth.isNew && lth.amount) {
-          await createLthPaymentMutation.mutateAsync({ amount: lth.amount, description: lth.description });
+          await createLthPaymentMutation.mutateAsync({ amount: lth.amount });
         } else if (!lth.isNew && lth.id) {
-          await updateLthPaymentMutation.mutateAsync({ id: lth.id, amount: lth.amount, description: lth.description });
+          await updateLthPaymentMutation.mutateAsync({ id: lth.id, amount: lth.amount });
         }
       }
 
       for (const expense of expenses) {
         if (expense.isNew && expense.amount && expense.categoryId) {
-          await createExpenseMutation.mutateAsync({ amount: expense.amount, categoryId: expense.categoryId, description: expense.description });
+          await createExpenseMutation.mutateAsync({ amount: expense.amount, categoryId: expense.categoryId, notes: expense.notes });
         } else if (!expense.isNew && expense.id) {
-          await updateExpenseMutation.mutateAsync({ id: expense.id, amount: expense.amount, categoryId: expense.categoryId, description: expense.description });
+          await updateExpenseMutation.mutateAsync({ id: expense.id, amount: expense.amount, categoryId: expense.categoryId, notes: expense.notes });
         }
       }
 
@@ -224,7 +218,7 @@ export default function ClientMonthEditPage() {
   };
 
   const addLthPayment = () => {
-    setLthPayments([...lthPayments, { id: `new-${Date.now()}`, amount: "", description: "", isNew: true }]);
+    setLthPayments([...lthPayments, { id: `new-${Date.now()}`, amount: "", isNew: true }]);
   };
 
   const removeLthPayment = async (index: number) => {
@@ -236,7 +230,7 @@ export default function ClientMonthEditPage() {
   };
 
   const addExpense = () => {
-    setExpenses([...expenses, { id: `new-${Date.now()}`, amount: "", categoryId: "", description: "", isNew: true }]);
+    setExpenses([...expenses, { id: `new-${Date.now()}`, amount: "", categoryId: "", notes: "", isNew: true }]);
   };
 
   const removeExpense = async (index: number) => {
@@ -346,41 +340,22 @@ export default function ClientMonthEditPage() {
             <Home className="h-4 w-4" />
             Rent Payment
           </CardTitle>
-          <CardDescription>Monthly rent payment details</CardDescription>
+          <CardDescription>Monthly rent payment amount</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="rent-amount">Amount</Label>
+              <Label htmlFor="rent-amount">Paid Amount</Label>
               <Input
                 id="rent-amount"
                 type="number"
                 step="0.01"
                 placeholder="0.00"
-                value={rentPayment.amount}
-                onChange={(e) => setRentPayment({ ...rentPayment, amount: e.target.value })}
+                value={rentPayment.paidAmount}
+                onChange={(e) => setRentPayment({ ...rentPayment, paidAmount: e.target.value })}
                 disabled={isLocked}
                 data-testid="input-rent-amount"
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="payment-method">Payment Method</Label>
-              <Select
-                value={rentPayment.paymentMethodId}
-                onValueChange={(value) => setRentPayment({ ...rentPayment, paymentMethodId: value })}
-                disabled={isLocked}
-              >
-                <SelectTrigger id="payment-method" data-testid="select-payment-method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentMethods?.map((method) => (
-                    <SelectItem key={method.id} value={method.id}>
-                      {method.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </CardContent>
@@ -415,20 +390,6 @@ export default function ClientMonthEditPage() {
                       }}
                       disabled={isLocked}
                       data-testid={`input-lth-amount-${index}`}
-                    />
-                  </div>
-                  <div className="flex-1 grid gap-2">
-                    <Label>Description</Label>
-                    <Input
-                      placeholder="Description"
-                      value={lth.description}
-                      onChange={(e) => {
-                        const updated = [...lthPayments];
-                        updated[index].description = e.target.value;
-                        setLthPayments(updated);
-                      }}
-                      disabled={isLocked}
-                      data-testid={`input-lth-description-${index}`}
                     />
                   </div>
                   <Button
@@ -512,17 +473,17 @@ export default function ClientMonthEditPage() {
                     </Select>
                   </div>
                   <div className="flex-1 grid gap-2">
-                    <Label>Description</Label>
+                    <Label>Notes</Label>
                     <Input
-                      placeholder="Description"
-                      value={expense.description}
+                      placeholder="Notes (optional)"
+                      value={expense.notes}
                       onChange={(e) => {
                         const updated = [...expenses];
-                        updated[index].description = e.target.value;
+                        updated[index].notes = e.target.value;
                         setExpenses(updated);
                       }}
                       disabled={isLocked}
-                      data-testid={`input-expense-description-${index}`}
+                      data-testid={`input-expense-notes-${index}`}
                     />
                   </div>
                   <Button
