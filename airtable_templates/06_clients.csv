@@ -1,0 +1,6 @@
+Full Name,Phone,County Case Number,County,Service Type,Service Status,Is Active,Created At
+John Doe,(612) 555-1234,HC-2024-001,Hennepin County,GRH,Active,TRUE,2024-01-15
+Jane Smith,(651) 555-5678,RC-2024-002,Ramsey County,HWS-I,Active,TRUE,2024-02-01
+Michael Johnson,(952) 555-9012,DC-2024-003,Dakota County,LTH,Active,TRUE,2024-03-10
+Sarah Williams,(763) 555-3456,AC-2024-004,Anoka County,HWS-II,Inactive,TRUE,2024-04-20
+Robert Brown,(651) 555-7890,WC-2024-005,Washington County,Bridge,Pending,TRUE,2024-05-15

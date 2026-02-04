@@ -1,0 +1,9 @@
+Client Name,Phone,County Case Number,County,Service Type,Service Status,Address,Landlord Name,Landlord Phone,Year,Month,Housing Support,Rent Expected,Rent Paid,Rent Confirmed,Total LTH,Total Expenses,Remaining Balance,Pool Fund,Is Locked
+John Doe,(612) 555-1234,HC-2024-001,Hennepin County,GRH,Active,123 Main St Apt 4B Minneapolis MN 55401,ABC Property Management,(612) 555-0001,2026,1,600.00,500.00,500.00,TRUE,0.00,50.00,50.00,50.00,FALSE
+John Doe,(612) 555-1234,HC-2024-001,Hennepin County,GRH,Active,123 Main St Apt 4B Minneapolis MN 55401,ABC Property Management,(612) 555-0001,2026,2,650.00,500.00,500.00,TRUE,0.00,100.00,50.00,50.00,FALSE
+Jane Smith,(651) 555-5678,RC-2024-002,Ramsey County,HWS-I,Active,789 Oak Ave #201 St Paul MN 55101,Smith Rentals LLC,(651) 555-0002,2026,1,550.00,450.00,450.00,TRUE,0.00,75.00,25.00,25.00,FALSE
+Jane Smith,(651) 555-5678,RC-2024-002,Ramsey County,HWS-I,Active,789 Oak Ave #201 St Paul MN 55101,Smith Rentals LLC,(651) 555-0002,2026,2,550.00,450.00,450.00,TRUE,0.00,50.00,50.00,50.00,FALSE
+Michael Johnson,(952) 555-9012,DC-2024-003,Dakota County,LTH,Active,555 Elm Street Eagan MN 55121,Dakota Properties,(952) 555-0003,2026,1,700.00,600.00,600.00,TRUE,350.00,35.00,65.00,65.00,FALSE
+Michael Johnson,(952) 555-9012,DC-2024-003,Dakota County,LTH,Active,555 Elm Street Eagan MN 55121,Dakota Properties,(952) 555-0003,2026,2,700.00,600.00,600.00,TRUE,200.00,150.00,-50.00,-50.00,FALSE
+Sarah Williams,(763) 555-3456,AC-2024-004,Anoka County,HWS-II,Inactive,321 Pine Road Blaine MN 55449,Northern Living Inc,(763) 555-0004,2026,1,500.00,400.00,400.00,TRUE,0.00,60.00,40.00,40.00,FALSE
+Robert Brown,(651) 555-7890,WC-2024-005,Washington County,Bridge,Pending,999 Cedar Lane Woodbury MN 55125,Eastside Rentals,(651) 555-0005,2026,1,450.00,350.00,350.00,TRUE,0.00,40.00,60.00,60.00,FALSE

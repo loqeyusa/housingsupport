@@ -1,0 +1,9 @@
+Client,Year,Month,Category,Amount,Expense Date,Notes
+John Doe,2026,1,Security Deposit,50.00,2026-01-05,Initial security deposit
+John Doe,2026,2,Utilities,100.00,2026-02-15,Electric bill assistance
+Jane Smith,2026,1,Moving Expenses,75.00,2026-01-12,Moving truck rental
+Jane Smith,2026,2,Household Supplies,50.00,2026-02-08,Basic supplies
+Michael Johnson,2026,1,Application Fees,35.00,2026-01-05,Background check fee
+Michael Johnson,2026,2,Furniture,150.00,2026-02-20,Bed and mattress
+Sarah Williams,2026,1,Utilities,60.00,2026-01-15,Gas bill
+Robert Brown,2026,1,Other,40.00,2026-01-18,Miscellaneous housing costs

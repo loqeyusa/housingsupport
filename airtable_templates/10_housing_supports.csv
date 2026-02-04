@@ -1,0 +1,9 @@
+Client,Year,Month,Amount,Received Date,Created By
+John Doe,2026,1,600.00,2026-01-05,Admin User
+John Doe,2026,2,650.00,2026-02-05,Admin User
+Jane Smith,2026,1,550.00,2026-01-10,Admin User
+Jane Smith,2026,2,550.00,2026-02-10,Admin User
+Michael Johnson,2026,1,700.00,2026-01-15,Admin User
+Michael Johnson,2026,2,700.00,2026-02-15,Admin User
+Sarah Williams,2026,1,500.00,2026-01-20,Admin User
+Robert Brown,2026,1,450.00,2026-01-25,Admin User
