@@ -118,7 +118,8 @@ export async function registerRoutes(
       let totalHousingSupport = 0;
       let totalRentPaid = 0;
       let totalExpenses = 0;
-      let clientsWithData = new Set<string>();
+      let totalPoolFund = 0;
+      let poolContributorSet = new Set<string>();
       
       for (const client of clients) {
         const clientMonths = await storage.getClientMonths(client.id);
@@ -137,29 +138,32 @@ export async function registerRoutes(
         for (const cm of relevantMonths) {
           // Get housing support
           const hs = await storage.getHousingSupport(cm.id);
-          if (hs) {
-            totalHousingSupport += parseFloat(hs.amount || "0");
-            clientsWithData.add(client.id);
-          }
+          const hsAmount = hs ? parseFloat(hs.amount || "0") : 0;
           
           // Get rent payment
           const rent = await storage.getRentPayment(cm.id);
-          if (rent) {
-            totalRentPaid += parseFloat(rent.paidAmount || "0");
-            clientsWithData.add(client.id);
-          }
+          const rentAmount = rent ? parseFloat(rent.paidAmount || "0") : 0;
           
           // Get expenses
           const expenses = await storage.getExpenses(cm.id);
-          if (expenses && expenses.length > 0) {
-            totalExpenses += expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
-            clientsWithData.add(client.id);
+          const expensesAmount = expenses && expenses.length > 0 
+            ? expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0)
+            : 0;
+          
+          // Add to totals
+          totalHousingSupport += hsAmount;
+          totalRentPaid += rentAmount;
+          totalExpenses += expensesAmount;
+          
+          // Pool Fund: Only count if client has HS AND (rent OR expenses) for the month
+          // Pool Fund = HS - (Rent + Expenses)
+          if (hsAmount > 0 && (rentAmount > 0 || expensesAmount > 0)) {
+            const monthPoolFund = hsAmount - (rentAmount + expensesAmount);
+            totalPoolFund += monthPoolFund;
+            poolContributorSet.add(client.id);
           }
         }
       }
-      
-      // Pool fund = Housing Support - (Rent + Expenses)
-      const totalPoolFund = totalHousingSupport - (totalRentPaid + totalExpenses);
       
       res.json({
         totalClients: clients.length,
@@ -167,7 +171,7 @@ export async function registerRoutes(
         totalRentPaid,
         totalExpenses,
         totalPoolFund,
-        poolContributors: clientsWithData.size,
+        poolContributors: poolContributorSet.size,
       });
     } catch (error) {
       console.error("Dashboard metrics error:", error);
@@ -413,11 +417,14 @@ export async function registerRoutes(
           }
         }
 
-        // Calculate pool amount: Housing Support - (Rent + Expenses)
-        const poolAmount = clientHousingSupport - (clientRentPaid + clientExpenses);
+        // Pool Fund Rule: Only count clients who have HS AND (rent OR expenses)
+        // Pool Amount = HS - (Rent + Expenses)
+        const hasHousingSupport = clientHousingSupport > 0;
+        const hasRentOrExpenses = clientRentPaid > 0 || clientExpenses > 0;
         
-        // Only include clients who have some financial data
-        if (clientHousingSupport > 0 || clientRentPaid > 0 || clientExpenses > 0) {
+        if (hasHousingSupport && hasRentOrExpenses) {
+          const poolAmount = clientHousingSupport - (clientRentPaid + clientExpenses);
+          
           contributions.push({
             clientId: client.id,
             clientName: client.fullName,

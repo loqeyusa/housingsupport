@@ -39,15 +39,15 @@ export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
 
-  // Build query params based on filter type
-  const metricsQueryKey = filterType === "all" 
-    ? ["/api/dashboard/metrics", { filter: "all" }]
+  // Build query URL with inline params (queryKey as single string with params)
+  const metricsUrl = filterType === "all" 
+    ? `/api/dashboard/metrics?filter=all`
     : filterType === "year"
-    ? ["/api/dashboard/metrics", { filter: "year", year: selectedYear }]
-    : ["/api/dashboard/metrics", { filter: "month", year: selectedYear, month: selectedMonth }];
+    ? `/api/dashboard/metrics?filter=year&year=${selectedYear}`
+    : `/api/dashboard/metrics?filter=month&year=${selectedYear}&month=${selectedMonth}`;
 
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
-    queryKey: metricsQueryKey,
+    queryKey: [metricsUrl],
   });
 
   // Generate year options (last 5 years)
