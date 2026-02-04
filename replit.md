@@ -27,10 +27,11 @@ A comprehensive housing support management system with JWT-based authentication,
 ```
 
 ## Key Features
-1. **Dashboard**: Metrics overview, county distribution, quick actions, recent activity
+1. **Dashboard**: Metrics overview with time filters (All Time, By Year, By Month), county distribution, quick actions, recent activity
 2. **Clients**: Full CRUD, filtering by county/service type/status, detailed profile with housing/documents/financials/history tabs
    - **Documents Tab**: In-page image viewer modal (no download, right-click disabled)
    - **Financials Tab**: Inline display of monthly data with month navigation (prev/next), summary cards for Housing Support, Rent, Expenses, Pool Fund
+   - **Financials Grid View**: Yearly overview showing all 12 months with columns (HS, Rent, Expenses, Balance, Pool Fund), click to view details
 3. **Bulk Updates**: Update housing support, rent, expenses, or LTH for multiple clients at once
    - Shows current amounts for each client
    - Warns before overwriting existing data with confirmation dialog
@@ -100,6 +101,9 @@ A comprehensive housing support management system with JWT-based authentication,
 
 ### Pool Fund Analytics
 - `GET /api/pool-fund-summary` - Get pool fund metrics and contributions (params: year, month)
+
+### Client Financials
+- `GET /api/clients/:clientId/yearly-financials` - Get all 12 months of financial data for a client (params: year)
 
 ### Audit
 - `GET/POST /api/audit-logs`

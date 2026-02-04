@@ -36,6 +36,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Grid3X3,
+  List,
 } from "lucide-react";
 import type {
   Client,
@@ -66,10 +68,11 @@ export default function ClientDetailPage() {
   const [documentBlobUrl, setDocumentBlobUrl] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   
-  // Financials month navigation state
+  // Financials state
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [financialsViewMode, setFinancialsViewMode] = useState<"grid" | "detail">("grid");
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
@@ -134,6 +137,32 @@ export default function ClientDetailPage() {
     enabled: !!currentMonthRecord?.id,
   });
 
+  // Yearly financials for grid view
+  interface MonthlyFinancialData {
+    month: number;
+    year: number;
+    clientMonthId: string | null;
+    isLocked: boolean;
+    housingSupport: number;
+    rentPaid: number;
+    totalExpenses: number;
+    remainingBalance: number;
+    poolFund: number;
+    hasData: boolean;
+  }
+
+  const { data: yearlyFinancials, isLoading: yearlyLoading } = useQuery<{
+    clientId: string;
+    year: number;
+    months: MonthlyFinancialData[];
+  }>({
+    queryKey: [`/api/clients/${clientId}/yearly-financials?year=${selectedYear}`],
+    enabled: !!clientId && financialsViewMode === "grid",
+  });
+
+  // Year options for grid view
+  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+
   const { data: history } = useQuery<ClientHistory[]>({
     queryKey: ["/api/clients", clientId, "history"],
     enabled: !!clientId,
@@ -179,6 +208,24 @@ export default function ClientDetailPage() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  const getMonthName = (month: number) => {
+    return new Date(2000, month - 1).toLocaleDateString("en-US", { month: "short" });
+  };
+
+  const handleMonthClick = (month: number) => {
+    setSelectedMonth(month);
+    setFinancialsViewMode("detail");
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
   };
 
   // Document viewing - fetch with auth and display in modal
@@ -678,35 +725,181 @@ export default function ClientDetailPage() {
 
           <TabsContent value="financials">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
                 <div>
                   <CardTitle className="text-lg">Monthly Financial Records</CardTitle>
                   <CardDescription>Housing support, rent, expenses, and pool fund by month</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={navigateToPreviousMonth}
-                    data-testid="button-prev-month"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <div className="flex items-center gap-2 min-w-[180px] justify-center">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{formatMonth(selectedYear, selectedMonth)}</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1 border rounded-md p-1">
+                    <Button 
+                      variant={financialsViewMode === "grid" ? "default" : "ghost"} 
+                      size="sm"
+                      onClick={() => setFinancialsViewMode("grid")}
+                      data-testid="button-view-grid"
+                    >
+                      <Grid3X3 className="h-4 w-4 mr-1" />
+                      Grid
+                    </Button>
+                    <Button 
+                      variant={financialsViewMode === "detail" ? "default" : "ghost"} 
+                      size="sm"
+                      onClick={() => setFinancialsViewMode("detail")}
+                      data-testid="button-view-detail"
+                    >
+                      <List className="h-4 w-4 mr-1" />
+                      Detail
+                    </Button>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={navigateToNextMonth}
-                    data-testid="button-next-month"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  
+                  {financialsViewMode === "grid" ? (
+                    <Select 
+                      value={selectedYear.toString()} 
+                      onValueChange={(v) => setSelectedYear(parseInt(v))}
+                    >
+                      <SelectTrigger className="w-[100px]" data-testid="select-financials-year">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {yearOptions.map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={navigateToPreviousMonth}
+                        data-testid="button-prev-month"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center gap-2 min-w-[180px] justify-center">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{formatMonth(selectedYear, selectedMonth)}</span>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={navigateToNextMonth}
+                        data-testid="button-next-month"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
+                {financialsViewMode === "grid" ? (
+                  <div className="space-y-4">
+                    {yearlyLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-sm text-muted-foreground mb-4">
+                          Click on any month row to view detailed financials
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[100px]">Month</TableHead>
+                                <TableHead className="text-right">Housing Support</TableHead>
+                                <TableHead className="text-right">Rent Paid</TableHead>
+                                <TableHead className="text-right">Expenses</TableHead>
+                                <TableHead className="text-right">Balance</TableHead>
+                                <TableHead className="text-right">Pool Fund</TableHead>
+                                <TableHead className="w-[80px]">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {yearlyFinancials?.months.map((monthData) => (
+                                <TableRow 
+                                  key={monthData.month}
+                                  className={`cursor-pointer hover-elevate ${monthData.hasData ? '' : 'opacity-50'}`}
+                                  onClick={() => handleMonthClick(monthData.month)}
+                                  data-testid={`row-month-${monthData.month}`}
+                                >
+                                  <TableCell className="font-medium">
+                                    {getMonthName(monthData.month)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-green-600">
+                                    {formatCurrency(monthData.housingSupport)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {formatCurrency(monthData.rentPaid)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {formatCurrency(monthData.totalExpenses)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {formatCurrency(monthData.remainingBalance)}
+                                  </TableCell>
+                                  <TableCell className={`text-right font-medium ${monthData.poolFund >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                    {formatCurrency(monthData.poolFund)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {monthData.hasData ? (
+                                      <Badge variant={monthData.isLocked ? "secondary" : "default"} className="text-xs">
+                                        {monthData.isLocked ? "Locked" : "Open"}
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs">Empty</Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        
+                        {/* Yearly Totals */}
+                        {yearlyFinancials && (
+                          <div className="mt-6 pt-4 border-t">
+                            <h4 className="font-medium mb-3">Year {selectedYear} Totals</h4>
+                            <div className="grid gap-4 md:grid-cols-5">
+                              <div className="text-center p-3 bg-muted rounded-lg">
+                                <div className="text-sm text-muted-foreground">Housing Support</div>
+                                <div className="text-lg font-bold text-green-600">
+                                  {formatCurrency(yearlyFinancials.months.reduce((sum, m) => sum + m.housingSupport, 0))}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-muted rounded-lg">
+                                <div className="text-sm text-muted-foreground">Rent Paid</div>
+                                <div className="text-lg font-bold">
+                                  {formatCurrency(yearlyFinancials.months.reduce((sum, m) => sum + m.rentPaid, 0))}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-muted rounded-lg">
+                                <div className="text-sm text-muted-foreground">Expenses</div>
+                                <div className="text-lg font-bold">
+                                  {formatCurrency(yearlyFinancials.months.reduce((sum, m) => sum + m.totalExpenses, 0))}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-muted rounded-lg">
+                                <div className="text-sm text-muted-foreground">Balance</div>
+                                <div className="text-lg font-bold">
+                                  {formatCurrency(yearlyFinancials.months.reduce((sum, m) => sum + m.remainingBalance, 0))}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-muted rounded-lg">
+                                <div className="text-sm text-muted-foreground">Pool Fund</div>
+                                <div className={`text-lg font-bold ${yearlyFinancials.months.reduce((sum, m) => sum + m.poolFund, 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                  {formatCurrency(yearlyFinancials.months.reduce((sum, m) => sum + m.poolFund, 0))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : (
                 <div className="space-y-6">
                   {/* Summary Cards */}
                   <div className="grid gap-4 md:grid-cols-4">
@@ -842,6 +1035,7 @@ export default function ClientDetailPage() {
                     </div>
                   )}
                 </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

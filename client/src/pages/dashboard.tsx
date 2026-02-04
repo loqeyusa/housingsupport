@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 import {
   Users,
@@ -17,6 +19,8 @@ import {
   FileSpreadsheet,
   ArrowRight,
   Activity,
+  Calendar,
+  Filter,
 } from "lucide-react";
 import type { Activity as ActivityType, Client, County } from "@shared/schema";
 
@@ -30,9 +34,47 @@ interface DashboardMetrics {
 }
 
 export default function DashboardPage() {
+  const now = new Date();
+  const [filterType, setFilterType] = useState<"all" | "year" | "month">("all");
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+
+  // Build query params based on filter type
+  const metricsQueryKey = filterType === "all" 
+    ? ["/api/dashboard/metrics", { filter: "all" }]
+    : filterType === "year"
+    ? ["/api/dashboard/metrics", { filter: "year", year: selectedYear }]
+    : ["/api/dashboard/metrics", { filter: "month", year: selectedYear, month: selectedMonth }];
+
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
-    queryKey: ["/api/dashboard/metrics"],
+    queryKey: metricsQueryKey,
   });
+
+  // Generate year options (last 5 years)
+  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+  
+  // Generate month options
+  const monthOptions = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" },
+  ];
+
+  const getFilterLabel = () => {
+    if (filterType === "all") return "All Time";
+    if (filterType === "year") return `Year ${selectedYear}`;
+    const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
+    return `${monthName} ${selectedYear}`;
+  };
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -108,13 +150,73 @@ export default function DashboardPage() {
   return (
     <DashboardLayout title="Dashboard">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">
               Overview of housing support operations
             </p>
           </div>
+          
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filter:</span>
+              </div>
+              
+              <Select 
+                value={filterType} 
+                onValueChange={(v) => setFilterType(v as "all" | "year" | "month")}
+              >
+                <SelectTrigger className="w-[130px]" data-testid="select-filter-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="year">By Year</SelectItem>
+                  <SelectItem value="month">By Month</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {(filterType === "year" || filterType === "month") && (
+                <Select 
+                  value={selectedYear.toString()} 
+                  onValueChange={(v) => setSelectedYear(parseInt(v))}
+                >
+                  <SelectTrigger className="w-[100px]" data-testid="select-filter-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map(year => (
+                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {filterType === "month" && (
+                <Select 
+                  value={selectedMonth.toString()} 
+                  onValueChange={(v) => setSelectedMonth(parseInt(v))}
+                >
+                  <SelectTrigger className="w-[130px]" data-testid="select-filter-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map(m => (
+                      <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              <Badge variant="outline" className="ml-2">
+                <Calendar className="mr-1 h-3 w-3" />
+                {getFilterLabel()}
+              </Badge>
+            </div>
+          </Card>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

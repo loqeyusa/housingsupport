@@ -108,19 +108,69 @@ export async function registerRoutes(
   // ============================================
   // Dashboard Metrics
   // ============================================
-  app.get("/api/dashboard/metrics", async (req, res) => {
+  app.get("/api/dashboard/metrics", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
+      const { year, month, filter } = req.query;
+      // filter can be: "all" | "year" | "month"
+      
       const clients = await storage.getClients();
+      
+      let totalHousingSupport = 0;
+      let totalRentPaid = 0;
+      let totalExpenses = 0;
+      let clientsWithData = new Set<string>();
+      
+      for (const client of clients) {
+        const clientMonths = await storage.getClientMonths(client.id);
+        
+        // Filter client months based on filter type
+        const relevantMonths = clientMonths.filter(cm => {
+          if (filter === "month" && year && month) {
+            return cm.year === parseInt(year as string) && cm.month === parseInt(month as string);
+          } else if (filter === "year" && year) {
+            return cm.year === parseInt(year as string);
+          }
+          // "all" or no filter - include everything
+          return true;
+        });
+        
+        for (const cm of relevantMonths) {
+          // Get housing support
+          const hs = await storage.getHousingSupport(cm.id);
+          if (hs) {
+            totalHousingSupport += parseFloat(hs.amount || "0");
+            clientsWithData.add(client.id);
+          }
+          
+          // Get rent payment
+          const rent = await storage.getRentPayment(cm.id);
+          if (rent) {
+            totalRentPaid += parseFloat(rent.paidAmount || "0");
+            clientsWithData.add(client.id);
+          }
+          
+          // Get expenses
+          const expenses = await storage.getExpenses(cm.id);
+          if (expenses && expenses.length > 0) {
+            totalExpenses += expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+            clientsWithData.add(client.id);
+          }
+        }
+      }
+      
+      // Pool fund = Housing Support - (Rent + Expenses)
+      const totalPoolFund = totalHousingSupport - (totalRentPaid + totalExpenses);
       
       res.json({
         totalClients: clients.length,
-        totalHousingSupport: 0,
-        totalRentPaid: 0,
-        totalExpenses: 0,
-        totalPoolFund: 0,
-        poolContributors: 0,
+        totalHousingSupport,
+        totalRentPaid,
+        totalExpenses,
+        totalPoolFund,
+        poolContributors: clientsWithData.size,
       });
     } catch (error) {
+      console.error("Dashboard metrics error:", error);
       res.status(500).json({ error: "Failed to fetch metrics" });
     }
   });
@@ -400,6 +450,90 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Pool fund summary error:", error);
       res.status(500).json({ error: "Failed to generate pool fund summary" });
+    }
+  });
+
+  // ============================================
+  // Client Yearly Financials (for grid view)
+  // ============================================
+  app.get("/api/clients/:clientId/yearly-financials", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      const clientId = req.params.clientId as string;
+      const year = parseInt(req.query.year as string);
+
+      if (isNaN(year)) {
+        return res.status(400).json({ error: "Year is required" });
+      }
+
+      const client = await storage.getClient(clientId);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+
+      const clientMonths = await storage.getClientMonths(clientId);
+      const yearMonths = clientMonths.filter(cm => cm.year === year);
+
+      // Build data for all 12 months
+      const monthlyData: any[] = [];
+
+      for (let month = 1; month <= 12; month++) {
+        const clientMonth = yearMonths.find(cm => cm.month === month);
+        
+        let housingSupport = 0;
+        let rentPaid = 0;
+        let totalExpenses = 0;
+        let clientMonthId = null;
+        let isLocked = false;
+
+        if (clientMonth) {
+          clientMonthId = clientMonth.id;
+          isLocked = clientMonth.isLocked || false;
+
+          // Get housing support
+          const hs = await storage.getHousingSupport(clientMonth.id);
+          if (hs) {
+            housingSupport = parseFloat(hs.amount || "0");
+          }
+
+          // Get rent payment
+          const rent = await storage.getRentPayment(clientMonth.id);
+          if (rent) {
+            rentPaid = parseFloat(rent.paidAmount || "0");
+          }
+
+          // Get expenses
+          const expenses = await storage.getExpenses(clientMonth.id);
+          if (expenses && expenses.length > 0) {
+            totalExpenses = expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+          }
+        }
+
+        // Calculate remaining balance and pool fund
+        const remainingBalance = housingSupport - rentPaid;
+        const poolFund = housingSupport - (rentPaid + totalExpenses);
+
+        monthlyData.push({
+          month,
+          year,
+          clientMonthId,
+          isLocked,
+          housingSupport,
+          rentPaid,
+          totalExpenses,
+          remainingBalance,
+          poolFund,
+          hasData: housingSupport > 0 || rentPaid > 0 || totalExpenses > 0,
+        });
+      }
+
+      res.json({
+        clientId,
+        year,
+        months: monthlyData,
+      });
+    } catch (error) {
+      console.error("Client yearly financials error:", error);
+      res.status(500).json({ error: "Failed to fetch yearly financials" });
     }
   });
 
