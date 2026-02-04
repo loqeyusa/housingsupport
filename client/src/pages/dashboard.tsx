@@ -135,7 +135,7 @@ export default function DashboardPage() {
     {
       title: "Remaining Balance",
       value: formatCurrency(metrics?.totalRemainingBalance || 0),
-      description: "HS received, no deductions yet",
+      description: "HS - (Rent + Expenses)",
       icon: DollarSign,
       color: "text-amber-500",
       bgColor: "bg-amber-500/10",

@@ -156,11 +156,9 @@ export async function registerRoutes(
           totalRentPaid += rentAmount;
           totalExpenses += expensesAmount;
           
-          // Remaining Balance: HS received but NO deductions yet (no rent AND no expenses)
-          // This tracks money received but not yet allocated
-          if (hsAmount > 0 && rentAmount === 0 && expensesAmount === 0) {
-            totalRemainingBalance += hsAmount;
-          }
+          // Remaining Balance: Cumulative (HS - Rent - Expenses) for ALL months
+          // This tracks the net balance across all months, regardless of deductions
+          totalRemainingBalance += (hsAmount - rentAmount - expensesAmount);
           
           // Pool Fund: Only count if client has HS AND (rent OR expenses) for the month
           // Pool Fund = HS - (Rent + Expenses)
@@ -566,8 +564,8 @@ export async function registerRoutes(
           }
         }
 
-        // Calculate remaining balance (HS - Rent)
-        const remainingBalance = housingSupport - rentPaid;
+        // Calculate remaining balance (HS - Rent - Expenses)
+        const remainingBalance = housingSupport - rentPaid - totalExpenses;
         
         // Pool Fund: Only show when there is HS AND (rent OR expenses)
         // Pool Fund = HS - (Rent + Expenses)
