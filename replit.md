@@ -1,22 +1,39 @@
-# Housing Support Application
+# Housing Support Management System
 
 ## Overview
-A comprehensive housing support management system for tracking clients, their financial data, housing details, and administrative operations.
+A comprehensive housing support management system with JWT-based authentication, role-based access control, client management, monthly financial tracking, bulk updates, reporting, and audit logging.
+
+## Authentication
+- **JWT-based authentication** (not Replit Auth)
+- **Two roles**: admin and super_admin
+- **Default super admin**: admin@housing.local / admin123
+- Super admins have additional access to User Management and Audit Logs
 
 ## Project Structure
 ```
 ├── client/                 # Frontend React application
 │   └── src/
-│       ├── components/     # Reusable UI components
-│       ├── pages/          # Page components
-│       └── lib/            # Utility functions
+│       ├── components/     # Reusable UI components (layout/, ui/)
+│       ├── pages/          # Page components (dashboard, clients, bulk-updates, reports, settings, users, audit-logs)
+│       └── lib/            # Utility functions (auth.tsx, queryClient.ts)
 ├── server/                 # Backend Express server
+│   ├── auth.ts            # JWT authentication & middleware
 │   ├── db.ts              # Database connection
 │   ├── routes.ts          # API routes
+│   ├── seed.ts            # Default data seeding
 │   └── storage.ts         # Database storage layer
 └── shared/                # Shared types and schemas
     └── schema.ts          # Drizzle ORM schemas
 ```
+
+## Key Features
+1. **Dashboard**: Metrics overview, county distribution, quick actions, recent activity
+2. **Clients**: Full CRUD, filtering by county/service type/status, detailed profile with housing/documents/financials/history tabs
+3. **Bulk Updates**: Update housing support, rent, expenses, or LTH for multiple clients at once
+4. **Reports**: Filterable client reports with CSV export
+5. **Settings**: Manage counties, service types, statuses, payment methods, expense categories
+6. **User Management** (Super Admin): Create/manage admin users
+7. **Audit Logs** (Super Admin): View all system changes with full detail
 
 ## Database Schema
 

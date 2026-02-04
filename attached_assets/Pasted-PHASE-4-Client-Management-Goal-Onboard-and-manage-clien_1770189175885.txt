@@ -1,0 +1,158 @@
+PHASE 4 – Client Management
+Goal
+
+Onboard and manage clients with history.
+
+Tasks
+
+Create client API
+
+Update client with history tracking
+
+Manage housing & landlord info
+
+Verification Checklist
+
+Client created
+
+Changes logged in history
+
+AI Prompt
+Implement client onboarding, updates with history tracking, and housing information management.
+PHASE 5 – Document Management
+Goal
+
+Attach documents to clients safely.
+
+Tasks
+
+File upload
+
+Document metadata storage
+
+Access control
+
+Verification Checklist
+
+Documents upload & download
+
+Audit logged
+
+AI Prompt
+Implement secure document upload and association with clients, including audit tracking.
+PHASE 6 – Monthly Financial Engine
+Goal
+
+Correct monthly tracking and pool fund logic.
+
+Tasks
+
+ClientMonth creation
+
+HS, rent, expense, LTH APIs
+
+Pool fund calculation
+
+Month locking
+
+Verification Checklist
+
+Correct calculations
+
+Locking enforced
+
+AI Prompt
+Implement monthly financial tracking with automatic pool fund calculation and 30-day locking rules.
+PHASE 7 – Bulk Operations
+Goal
+
+Fast monthly updates at scale.
+
+Tasks
+
+Bulk update API
+
+Client selection logic
+
+Activity logging
+
+Verification Checklist
+
+Bulk updates apply correctly
+
+Audits generated
+
+AI Prompt
+Implement bulk financial updates with validation, audit logging, and pool fund recalculation.
+PHASE 8 – Dashboard & Activity Feed
+Goal
+
+Organization-level visibility.
+
+Tasks
+
+KPI queries
+
+Activity feed
+
+County aggregation
+
+Verification Checklist
+
+Metrics accurate
+
+Activity readable
+
+AI Prompt
+Implement dashboard queries for metrics, county distribution, and recent activity feed.
+PHASE 9 – Reports & Exports
+Goal
+
+Compliance-ready reporting.
+
+Tasks
+
+Year-based filters
+
+CSV / Excel export
+
+Verification Checklist
+
+Correct data exported
+
+AI Prompt
+Implement yearly reports with filters and CSV/Excel export functionality.
+PHASE 10 – Super Admin Controls & Hardening
+Goal
+
+Final control & system safety.
+
+Tasks
+
+User management
+
+Audit viewer
+
+Edge case handling
+
+Verification Checklist
+
+Locked edits overridden correctly
+
+Audit integrity intact
+
+AI Prompt
+Implement super_admin features, audit log viewer, and system hardening for financial correctness.
+7. Completion Criteria
+
+The system is complete when:
+
+No Airtable dependency remains
+
+All financial data is time-scoped
+
+Pool fund is provably correct
+
+Every change is auditable
+
+Admin and super_admin roles are enforced

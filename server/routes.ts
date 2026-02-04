@@ -20,19 +20,231 @@ import {
   insertPoolFundSchema,
   insertAuditLogSchema,
   insertActivitySchema,
+  loginSchema,
 } from "@shared/schema";
+import { 
+  generateToken, 
+  hashPassword, 
+  comparePassword, 
+  authMiddleware, 
+  superAdminMiddleware,
+  type AuthenticatedRequest 
+} from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // ============================================
+  // Authentication
+  // ============================================
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid credentials format" });
+      }
+
+      const { email, password } = parsed.data;
+      const user = await storage.getUserByEmail(email);
+
+      if (!user || !user.isActive) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const isValidPassword = await comparePassword(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const token = generateToken({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.get("/api/auth/me", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const user = await storage.getUser(req.user.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // ============================================
+  // Dashboard Metrics
+  // ============================================
+  app.get("/api/dashboard/metrics", async (req, res) => {
+    try {
+      const clients = await storage.getClients();
+      
+      res.json({
+        totalClients: clients.length,
+        totalHousingSupport: 0,
+        totalRentPaid: 0,
+        totalExpenses: 0,
+        totalPoolFund: 0,
+        poolContributors: 0,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch metrics" });
+    }
+  });
+
+  // ============================================
+  // Bulk Updates
+  // ============================================
+  app.post("/api/bulk-updates", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { year, month, financialType, amount, clientIds, clientAmounts, useUniformAmount } = req.body;
+
+      if (!year || !month || !financialType || !clientIds || clientIds.length === 0) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      let updatedCount = 0;
+
+      for (const clientId of clientIds) {
+        const clientAmount = useUniformAmount ? amount : clientAmounts[clientId];
+        if (!clientAmount) continue;
+
+        let clientMonth = await storage.getClientMonthByPeriod(clientId, year, month);
+        
+        if (!clientMonth) {
+          clientMonth = await storage.createClientMonth({
+            clientId,
+            year,
+            month,
+            isLocked: false,
+          });
+        }
+
+        if (clientMonth.isLocked && req.user?.role !== "super_admin") {
+          continue;
+        }
+
+        switch (financialType) {
+          case "housing_support":
+            const existingHS = await storage.getHousingSupport(clientMonth.id);
+            if (existingHS) {
+              await storage.updateHousingSupport(existingHS.id, {
+                amount: clientAmount,
+                createdBy: req.user?.userId,
+              });
+            } else {
+              await storage.createHousingSupport({
+                clientMonthId: clientMonth.id,
+                amount: clientAmount,
+                createdBy: req.user?.userId,
+              });
+            }
+            break;
+          case "rent":
+            const existingRent = await storage.getRentPayment(clientMonth.id);
+            if (existingRent) {
+              await storage.updateRentPayment(existingRent.id, {
+                paidAmount: clientAmount,
+              });
+            } else {
+              await storage.createRentPayment({
+                clientMonthId: clientMonth.id,
+                paidAmount: clientAmount,
+              });
+            }
+            break;
+          case "expense":
+            await storage.createExpense({
+              clientMonthId: clientMonth.id,
+              amount: clientAmount,
+            });
+            break;
+          case "lth":
+            await storage.createLthPayment({
+              clientMonthId: clientMonth.id,
+              amount: clientAmount,
+            });
+            break;
+        }
+
+        updatedCount++;
+      }
+
+      await storage.createActivity({
+        message: `Bulk ${financialType.replace("_", " ")} update for ${updatedCount} clients - ${new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
+        relatedClientId: null,
+      });
+
+      res.json({ success: true, updatedCount });
+    } catch (error) {
+      console.error("Bulk update error:", error);
+      res.status(500).json({ error: "Bulk update failed" });
+    }
+  });
+
+  // ============================================
+  // Reports
+  // ============================================
+  app.get("/api/reports", async (req, res) => {
+    try {
+      const clients = await storage.getClients();
+      const counties = await storage.getCounties();
+      const serviceTypes = await storage.getServiceTypes();
+
+      const reportData = clients.map((client) => ({
+        clientId: client.id,
+        clientName: client.fullName,
+        county: counties.find((c) => c.id === client.countyId)?.name || "-",
+        serviceType: serviceTypes.find((t) => t.id === client.serviceTypeId)?.name || "-",
+        totalHousingSupport: 0,
+        totalRentPaid: 0,
+        totalExpenses: 0,
+        poolFund: 0,
+      }));
+
+      res.json(reportData);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
   // ============================================
   // Users
   // ============================================
-  app.get("/api/users", async (req, res) => {
+  app.get("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const users = await storage.getUsers();
-      res.json(users);
+      const usersWithoutPasswords = users.map(({ password: _, ...user }) => user);
+      res.json(usersWithoutPasswords);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch users" });
     }
@@ -50,30 +262,51 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/users", async (req, res) => {
+  app.post("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertUserSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const user = await storage.createUser(parsed.data);
-      res.status(201).json(user);
+      
+      const existingUser = await storage.getUserByEmail(parsed.data.email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already in use" });
+      }
+      
+      const hashedPassword = await hashPassword(parsed.data.password);
+      const user = await storage.createUser({
+        ...parsed.data,
+        password: hashedPassword,
+      });
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
     } catch (error) {
+      console.error("Create user error:", error);
       res.status(500).json({ error: "Failed to create user" });
     }
   });
 
-  app.patch("/api/users/:id", async (req, res) => {
+  app.patch("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertUserSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const user = await storage.updateUser(req.params.id, parsed.data);
+      
+      const updateData = { ...parsed.data };
+      if (updateData.password) {
+        updateData.password = await hashPassword(updateData.password);
+      }
+      
+      const user = await storage.updateUser(req.params.id, updateData);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(user);
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
     }
@@ -788,7 +1021,7 @@ export async function registerRoutes(
   // ============================================
   // Audit Logs
   // ============================================
-  app.get("/api/audit-logs", async (req, res) => {
+  app.get("/api/audit-logs", authMiddleware, superAdminMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const entityId = req.query.entityId as string | undefined;
       const logs = await storage.getAuditLogs(entityId);

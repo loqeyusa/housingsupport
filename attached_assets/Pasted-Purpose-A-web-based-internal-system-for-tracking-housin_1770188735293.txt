@@ -1,0 +1,241 @@
+Purpose
+
+A web-based internal system for tracking housing support clients, their documents, monthly financial activity, pool fund contributions, and administrative actions with full auditability.
+
+Core Principles
+
+Clients are stable entities
+
+Financial data is time-based (month + year)
+
+Nothing important is overwritten silently
+
+Admins have power, super_admins have override power
+
+Everything is auditable
+
+2. User Roles & Permissions
+2.1 Admin
+
+Admins handle day-to-day operations.
+
+Admin can:
+
+Create and update clients
+
+Upload and manage client documents
+
+Enter monthly financial data (within edit window)
+
+Perform bulk updates
+
+View dashboard, reports, and client data
+
+Admin cannot:
+
+Edit locked months (past 30 days)
+
+Delete financial history
+
+Override system locks
+
+2.2 Super Admin
+
+Super admins exist for compliance and corrections.
+
+Super Admin can:
+
+Do everything an admin can
+
+Edit locked months
+
+Correct historical records
+
+Manage admin users
+
+View full audit logs
+
+Override system restrictions
+
+3. Application Pages & Features
+3.1 Authentication Pages
+
+Login page
+
+Role-based redirect after login
+
+3.2 Dashboard Page (Admin & Super Admin)
+
+Metrics displayed:
+
+Total clients
+
+Total Housing Support received (year-filtered)
+
+Total rent paid
+
+Total expenses
+
+Total pool fund amount (can be negative)
+
+Number of pool fund contributors
+
+Visual sections:
+
+County distribution (clients per county)
+
+Recent activity feed (human-readable)
+
+Quick actions panel
+
+3.3 Clients Page
+
+List view:
+
+Search by name / case number
+
+Filter by county, service type, service status
+
+Sort by name, county, status
+
+Clicking a client opens Client Detail Page
+
+3.4 Client Detail Page
+Profile Section
+
+Name
+
+Phone
+
+County
+
+County case number
+
+Service type
+
+Service status
+
+Housing & Landlord Section
+
+Client address
+
+Landlord name
+
+Landlord phone
+
+Landlord address
+
+Documents Section
+
+HS Award Letter
+
+Lease
+
+Policy signed
+
+Other documents
+
+Upload history (who, when)
+
+Financials Section (Core)
+
+For each month:
+
+HS received
+
+Rent expected vs paid
+
+Expenses (itemized)
+
+LTH payments (multiple per month)
+
+Pool fund contribution
+
+Pool Fund Summary
+
+Monthly contributions
+
+Total contribution by client
+
+Activity Timeline
+
+All actions related to this client
+
+3.5 Bulk Financial Update Page
+
+Steps:
+
+Select year and month
+
+Select clients:
+
+All clients
+
+By county
+
+Manual selection
+
+Select financial type:
+
+Housing Support
+
+Rent
+
+Expense
+
+LTH
+
+Input amounts:
+
+Same amount for all
+
+Override per client
+
+Submit
+
+System actions:
+
+Validates edit window
+
+Writes individual records
+
+Recalculates pool fund
+
+Logs audit & activity
+
+3.6 Reports Page
+
+Capabilities:
+
+Year-based reports
+
+Filter by county, service type
+
+Export to CSV / Excel
+
+3.7 Admin Settings Page
+
+(Admin only sees reference data)
+
+Manage counties
+
+Manage service types
+
+Manage service statuses
+
+Manage payment methods
+
+Manage expense categories
+
+3.8 Super Admin Pages
+User Management
+
+Create / deactivate admins
+
+Assign roles
+
+Audit Log Viewer
+
+Filter by user, entity, date
+
+View old vs new values
