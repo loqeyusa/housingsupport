@@ -10,6 +10,7 @@ import DashboardPage from "@/pages/dashboard";
 import ClientsPage from "@/pages/clients";
 import ClientDetailPage from "@/pages/client-detail";
 import ClientFormPage from "@/pages/client-form";
+import ClientMonthEditPage from "@/pages/client-month-edit";
 import BulkUpdatesPage from "@/pages/bulk-updates";
 import ReportsPage from "@/pages/reports";
 import PoolFundPage from "@/pages/pool-fund";
@@ -78,6 +79,10 @@ function Router() {
       
       <Route path="/clients/new">
         <ProtectedRoute component={ClientFormPage} />
+      </Route>
+      
+      <Route path="/clients/:clientId/months/:monthId">
+        <ProtectedRoute component={ClientMonthEditPage} />
       </Route>
       
       <Route path="/clients/:id/edit">
