@@ -28,14 +28,16 @@ A comprehensive housing support management system with JWT-based authentication,
 
 ## Key Features
 1. **Dashboard**: Metrics overview with time filters (All Time, By Year, By Month), county distribution, quick actions, recent activity
+   - **Remaining Balance**: Cumulative Housing Support received but not yet allocated (no rent AND no expenses for that month)
 2. **Clients**: Full CRUD, filtering by county/service type/status, detailed profile with housing/documents/financials/history tabs
-   - **Documents Tab**: In-page image viewer modal (no download, right-click disabled)
+   - **Documents Tab**: In-page image viewer modal (no download, right-click disabled); Super admins can delete documents
    - **Financials Tab**: Inline display of monthly data with month navigation (prev/next), summary cards for Housing Support, Rent, Expenses, Pool Fund
    - **Financials Grid View**: Yearly overview showing all 12 months with columns (HS, Rent, Expenses, Balance, Pool Fund), click to view details
+   - **Pool Fund Display**: Shows $0 when client has HS but no rent/expenses (unallocated funds)
 3. **Bulk Updates**: Update housing support, rent, expenses, or LTH for multiple clients at once
    - Shows current amounts for each client
    - Warns before overwriting existing data with confirmation dialog
-4. **Reports**: Filterable client reports with CSV export
+4. **Reports**: Filterable client reports (by year, county, service type) with CSV export showing Housing Support, Rent Paid, Expenses, Pool Fund columns
 5. **Pool Fund**: Dedicated page with:
    - Monthly/Yearly view toggle
    - Total pool fund, contributor count, positive/negative balance metrics
