@@ -39,8 +39,10 @@ export default function ReportsPage() {
     queryKey: ["/api/service-types"],
   });
 
+  const reportsUrl = `/api/reports?year=${year}&county=${countyFilter}&serviceType=${serviceTypeFilter}`;
+  
   const { data: reportData, isLoading: reportLoading } = useQuery<ReportData[]>({
-    queryKey: ["/api/reports", year, countyFilter, serviceTypeFilter],
+    queryKey: [reportsUrl],
   });
 
   const getCountyName = (countyId: string | null) => {
@@ -68,14 +70,17 @@ export default function ReportsPage() {
   });
 
   const handleExportCSV = () => {
-    if (!filteredClients) return;
+    if (!reportData || reportData.length === 0) return;
 
-    const headers = ["Name", "County", "Service Type", "Status"];
-    const rows = filteredClients.map((client) => [
-      client.fullName,
-      getCountyName(client.countyId),
-      getServiceTypeName(client.serviceTypeId),
-      client.isActive ? "Active" : "Inactive",
+    const headers = ["Name", "County", "Service Type", "Housing Support", "Rent Paid", "Expenses", "Pool Fund"];
+    const rows = reportData.map((report) => [
+      report.clientName,
+      report.county,
+      report.serviceType,
+      report.totalHousingSupport.toFixed(2),
+      report.totalRentPaid.toFixed(2),
+      report.totalExpenses.toFixed(2),
+      report.poolFund.toFixed(2),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -90,11 +95,11 @@ export default function ReportsPage() {
   };
 
   const totals = {
-    clients: filteredClients?.length || 0,
-    housingSupport: 0,
-    rentPaid: 0,
-    expenses: 0,
-    poolFund: 0,
+    clients: reportData?.length || 0,
+    housingSupport: reportData?.reduce((sum, r) => sum + r.totalHousingSupport, 0) || 0,
+    rentPaid: reportData?.reduce((sum, r) => sum + r.totalRentPaid, 0) || 0,
+    expenses: reportData?.reduce((sum, r) => sum + r.totalExpenses, 0) || 0,
+    poolFund: reportData?.reduce((sum, r) => sum + r.poolFund, 0) || 0,
   };
 
   return (
@@ -223,17 +228,17 @@ export default function ReportsPage() {
               Client Report - {year}
             </CardTitle>
             <CardDescription>
-              {filteredClients?.length || 0} clients matching filters
+              {reportData?.length || 0} clients matching filters
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {clientsLoading ? (
+            {reportLoading ? (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : filteredClients?.length === 0 ? (
+            ) : reportData?.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No clients match the selected filters</p>
               </div>
@@ -244,24 +249,24 @@ export default function ReportsPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>County</TableHead>
                     <TableHead>Service Type</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Housing Support</TableHead>
+                    <TableHead className="text-right">Rent Paid</TableHead>
+                    <TableHead className="text-right">Expenses</TableHead>
+                    <TableHead className="text-right">Pool Fund</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClients?.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell className="font-medium">{client.fullName}</TableCell>
-                      <TableCell>{getCountyName(client.countyId)}</TableCell>
-                      <TableCell>{getServiceTypeName(client.serviceTypeId)}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                            client.isActive
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                          }`}
-                        >
-                          {client.isActive ? "Active" : "Inactive"}
+                  {reportData?.map((report) => (
+                    <TableRow key={report.clientId}>
+                      <TableCell className="font-medium">{report.clientName}</TableCell>
+                      <TableCell>{report.county}</TableCell>
+                      <TableCell>{report.serviceType}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(report.totalHousingSupport)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(report.totalRentPaid)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(report.totalExpenses)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={report.poolFund >= 0 ? "text-emerald-600" : "text-red-600"}>
+                          {formatCurrency(report.poolFund)}
                         </span>
                       </TableCell>
                     </TableRow>

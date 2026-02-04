@@ -38,6 +38,7 @@ import {
   Plus,
   Grid3X3,
   List,
+  Trash2,
 } from "lucide-react";
 import type {
   Client,
@@ -372,6 +373,27 @@ export default function ClientDetailPage() {
     }
   };
 
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      await apiRequest("DELETE", `/api/client-documents/${documentId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "documents"] });
+      toast({
+        title: "Document deleted",
+        description: "The document has been deleted successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: "Failed to delete document. You may not have permission.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (clientLoading) {
     return (
       <DashboardLayout title="Client Details" breadcrumbs={[{ label: "Clients", href: "/clients" }]}>
@@ -659,15 +681,28 @@ export default function ClientDetailPage() {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleViewDocument(doc)}
-                              data-testid={`button-view-document-${doc.id}`}
-                            >
-                              <Eye className="mr-1 h-3 w-3" />
-                              View
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleViewDocument(doc)}
+                                data-testid={`button-view-document-${doc.id}`}
+                              >
+                                <Eye className="mr-1 h-3 w-3" />
+                                View
+                              </Button>
+                              {user?.role === "super_admin" && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleDeleteDocument(doc.id)}
+                                  data-testid={`button-delete-document-${doc.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

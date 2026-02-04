@@ -30,6 +30,7 @@ interface DashboardMetrics {
   totalRentPaid: number;
   totalExpenses: number;
   totalPoolFund: number;
+  totalRemainingBalance: number;
   poolContributors: number;
 }
 
@@ -130,6 +131,14 @@ export default function DashboardPage() {
       icon: Receipt,
       color: "text-orange-500",
       bgColor: "bg-orange-500/10",
+    },
+    {
+      title: "Remaining Balance",
+      value: formatCurrency(metrics?.totalRemainingBalance || 0),
+      description: "HS received, no deductions yet",
+      icon: DollarSign,
+      color: "text-amber-500",
+      bgColor: "bg-amber-500/10",
     },
     {
       title: "Pool Fund",

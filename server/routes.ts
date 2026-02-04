@@ -119,6 +119,7 @@ export async function registerRoutes(
       let totalRentPaid = 0;
       let totalExpenses = 0;
       let totalPoolFund = 0;
+      let totalRemainingBalance = 0; // HS received but no deductions yet
       let poolContributorSet = new Set<string>();
       
       for (const client of clients) {
@@ -155,6 +156,12 @@ export async function registerRoutes(
           totalRentPaid += rentAmount;
           totalExpenses += expensesAmount;
           
+          // Remaining Balance: HS received but NO deductions yet (no rent AND no expenses)
+          // This tracks money received but not yet allocated
+          if (hsAmount > 0 && rentAmount === 0 && expensesAmount === 0) {
+            totalRemainingBalance += hsAmount;
+          }
+          
           // Pool Fund: Only count if client has HS AND (rent OR expenses) for the month
           // Pool Fund = HS - (Rent + Expenses)
           if (hsAmount > 0 && (rentAmount > 0 || expensesAmount > 0)) {
@@ -171,6 +178,7 @@ export async function registerRoutes(
         totalRentPaid,
         totalExpenses,
         totalPoolFund,
+        totalRemainingBalance,
         poolContributors: poolContributorSet.size,
       });
     } catch (error) {
@@ -338,25 +346,68 @@ export async function registerRoutes(
   // ============================================
   // Reports
   // ============================================
-  app.get("/api/reports", async (req, res) => {
+  app.get("/api/reports", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
-      const clients = await storage.getClients();
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const countyFilter = req.query.county as string;
+      const serviceTypeFilter = req.query.serviceType as string;
+      
+      let clients = await storage.getClients();
       const counties = await storage.getCounties();
       const serviceTypes = await storage.getServiceTypes();
+      
+      // Apply filters
+      if (countyFilter && countyFilter !== "all") {
+        clients = clients.filter(c => c.countyId === countyFilter);
+      }
+      if (serviceTypeFilter && serviceTypeFilter !== "all") {
+        clients = clients.filter(c => c.serviceTypeId === serviceTypeFilter);
+      }
 
-      const reportData = clients.map((client) => ({
-        clientId: client.id,
-        clientName: client.fullName,
-        county: counties.find((c) => c.id === client.countyId)?.name || "-",
-        serviceType: serviceTypes.find((t) => t.id === client.serviceTypeId)?.name || "-",
-        totalHousingSupport: 0,
-        totalRentPaid: 0,
-        totalExpenses: 0,
-        poolFund: 0,
-      }));
+      const reportData = [];
+      
+      for (const client of clients) {
+        const clientMonths = await storage.getClientMonths(client.id);
+        const yearMonths = clientMonths.filter(cm => cm.year === year);
+        
+        let totalHousingSupport = 0;
+        let totalRentPaid = 0;
+        let totalExpenses = 0;
+        
+        for (const cm of yearMonths) {
+          const hs = await storage.getHousingSupport(cm.id);
+          if (hs) totalHousingSupport += parseFloat(hs.amount || "0");
+          
+          const rent = await storage.getRentPayment(cm.id);
+          if (rent) totalRentPaid += parseFloat(rent.paidAmount || "0");
+          
+          const expenses = await storage.getExpenses(cm.id);
+          if (expenses) {
+            totalExpenses += expenses.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+          }
+        }
+        
+        // Pool Fund: Only count when HS AND (rent OR expenses)
+        const hasRentOrExpenses = totalRentPaid > 0 || totalExpenses > 0;
+        const poolFund = (totalHousingSupport > 0 && hasRentOrExpenses)
+          ? totalHousingSupport - (totalRentPaid + totalExpenses)
+          : 0;
+        
+        reportData.push({
+          clientId: client.id,
+          clientName: client.fullName,
+          county: counties.find((c) => c.id === client.countyId)?.name || "-",
+          serviceType: serviceTypes.find((t) => t.id === client.serviceTypeId)?.name || "-",
+          totalHousingSupport,
+          totalRentPaid,
+          totalExpenses,
+          poolFund,
+        });
+      }
 
       res.json(reportData);
     } catch (error) {
+      console.error("Reports error:", error);
       res.status(500).json({ error: "Failed to generate report" });
     }
   });
@@ -515,9 +566,15 @@ export async function registerRoutes(
           }
         }
 
-        // Calculate remaining balance and pool fund
+        // Calculate remaining balance (HS - Rent)
         const remainingBalance = housingSupport - rentPaid;
-        const poolFund = housingSupport - (rentPaid + totalExpenses);
+        
+        // Pool Fund: Only show when there is HS AND (rent OR expenses)
+        // Pool Fund = HS - (Rent + Expenses)
+        const hasRentOrExpenses = rentPaid > 0 || totalExpenses > 0;
+        const poolFund = (housingSupport > 0 && hasRentOrExpenses) 
+          ? housingSupport - (rentPaid + totalExpenses)
+          : 0;
 
         monthlyData.push({
           month,
@@ -1075,9 +1132,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/client-documents/:id", async (req, res) => {
+  app.delete("/api/client-documents/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
-      await storage.deleteClientDocument(req.params.id);
+      // Only super_admin can delete documents
+      if (req.user?.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can delete documents" });
+      }
+      await storage.deleteClientDocument(req.params.id as string);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete client document" });
