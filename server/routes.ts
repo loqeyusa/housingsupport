@@ -30,11 +30,15 @@ import {
   superAdminMiddleware,
   type AuthenticatedRequest 
 } from "./auth";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // Register object storage routes for document uploads
+  registerObjectStorageRoutes(app);
   
   // ============================================
   // Authentication
@@ -300,7 +304,7 @@ export async function registerRoutes(
         updateData.password = await hashPassword(updateData.password);
       }
       
-      const user = await storage.updateUser(req.params.id, updateData);
+      const user = await storage.updateUser(req.params.id as string, updateData);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -603,20 +607,41 @@ export async function registerRoutes(
 
   app.post("/api/clients", async (req, res) => {
     try {
-      const parsed = insertClientSchema.safeParse(req.body);
+      const { address, landlordName, landlordPhone, landlordAddress, ...clientData } = req.body;
+      const parsed = insertClientSchema.safeParse(clientData);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const client = await storage.createClient(parsed.data);
+      
+      // Create housing record if any housing data provided
+      if (address || landlordName || landlordPhone || landlordAddress) {
+        await storage.createClientHousing({
+          clientId: client.id,
+          address: address || null,
+          landlordName: landlordName || null,
+          landlordPhone: landlordPhone || null,
+          landlordAddress: landlordAddress || null,
+        });
+      }
+      
+      // Create activity for new client
+      await storage.createActivity({
+        message: `New client added: ${client.fullName}`,
+        relatedClientId: client.id,
+      });
+      
       res.status(201).json(client);
     } catch (error) {
+      console.error("Failed to create client:", error);
       res.status(500).json({ error: "Failed to create client" });
     }
   });
 
   app.patch("/api/clients/:id", async (req, res) => {
     try {
-      const parsed = insertClientSchema.partial().safeParse(req.body);
+      const { address, landlordName, landlordPhone, landlordAddress, ...clientData } = req.body;
+      const parsed = insertClientSchema.partial().safeParse(clientData);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
@@ -624,8 +649,31 @@ export async function registerRoutes(
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
+      
+      // Update or create housing record
+      if (address !== undefined || landlordName !== undefined || landlordPhone !== undefined || landlordAddress !== undefined) {
+        const existingHousing = await storage.getClientHousing(req.params.id);
+        if (existingHousing) {
+          await storage.updateClientHousing(existingHousing.id, {
+            address: address ?? existingHousing.address,
+            landlordName: landlordName ?? existingHousing.landlordName,
+            landlordPhone: landlordPhone ?? existingHousing.landlordPhone,
+            landlordAddress: landlordAddress ?? existingHousing.landlordAddress,
+          });
+        } else {
+          await storage.createClientHousing({
+            clientId: req.params.id,
+            address: address || null,
+            landlordName: landlordName || null,
+            landlordPhone: landlordPhone || null,
+            landlordAddress: landlordAddress || null,
+          });
+        }
+      }
+      
       res.json(client);
     } catch (error) {
+      console.error("Failed to update client:", error);
       res.status(500).json({ error: "Failed to update client" });
     }
   });

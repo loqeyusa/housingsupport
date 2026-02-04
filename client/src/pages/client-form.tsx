@@ -26,6 +26,10 @@ const clientFormSchema = z.object({
   serviceTypeId: z.string().optional(),
   serviceStatusId: z.string().optional(),
   isActive: z.boolean().default(true),
+  address: z.string().optional(),
+  landlordName: z.string().optional(),
+  landlordPhone: z.string().optional(),
+  landlordAddress: z.string().optional(),
 });
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
@@ -40,6 +44,11 @@ export default function ClientFormPage() {
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
+    enabled: !!clientId && isEditing,
+  });
+
+  const { data: housing } = useQuery<{ address?: string; landlordName?: string; landlordPhone?: string; landlordAddress?: string } | null>({
+    queryKey: ["/api/clients", clientId, "housing"],
     enabled: !!clientId && isEditing,
   });
 
@@ -65,6 +74,10 @@ export default function ClientFormPage() {
       serviceTypeId: "",
       serviceStatusId: "",
       isActive: true,
+      address: "",
+      landlordName: "",
+      landlordPhone: "",
+      landlordAddress: "",
     },
   });
 
@@ -78,9 +91,13 @@ export default function ClientFormPage() {
         serviceTypeId: client.serviceTypeId || "",
         serviceStatusId: client.serviceStatusId || "",
         isActive: client.isActive,
+        address: housing?.address || "",
+        landlordName: housing?.landlordName || "",
+        landlordPhone: housing?.landlordPhone || "",
+        landlordAddress: housing?.landlordAddress || "",
       });
     }
-  }, [client, isEditing, form]);
+  }, [client, housing, isEditing, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: ClientFormData) => {
@@ -88,6 +105,7 @@ export default function ClientFormPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
       toast({
         title: "Client created",
         description: "The client has been created successfully.",
@@ -128,9 +146,13 @@ export default function ClientFormPage() {
   const onSubmit = (data: ClientFormData) => {
     const cleanedData = {
       ...data,
-      countyId: data.countyId || null,
-      serviceTypeId: data.serviceTypeId || null,
-      serviceStatusId: data.serviceStatusId || null,
+      countyId: data.countyId || undefined,
+      serviceTypeId: data.serviceTypeId || undefined,
+      serviceStatusId: data.serviceStatusId || undefined,
+      address: data.address || undefined,
+      landlordName: data.landlordName || undefined,
+      landlordPhone: data.landlordPhone || undefined,
+      landlordAddress: data.landlordAddress || undefined,
     };
 
     if (isEditing) {
@@ -356,6 +378,86 @@ export default function ClientFormPage() {
                           data-testid="switch-is-active"
                         />
                       </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Housing & Landlord Information</CardTitle>
+                <CardDescription>Client address and landlord details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter client address"
+                          data-testid="input-address"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Separator />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="landlordName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Landlord Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter landlord name"
+                            data-testid="input-landlord-name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="landlordPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Landlord Phone</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter landlord phone"
+                            data-testid="input-landlord-phone"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="landlordAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Landlord Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter landlord address"
+                          data-testid="input-landlord-address"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

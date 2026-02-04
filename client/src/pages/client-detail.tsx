@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -9,8 +10,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import {
-  User,
+  User as UserIcon,
   Phone,
   MapPin,
   FileText,
@@ -22,6 +30,9 @@ import {
   ArrowLeft,
   Calendar,
   Upload,
+  Loader2,
+  ExternalLink,
+  User,
 } from "lucide-react";
 import type {
   Client,
@@ -34,11 +45,18 @@ import type {
   ClientHistory,
   HousingSupport,
   RentPayment,
+  User as UserType,
 } from "@shared/schema";
 
 export default function ClientDetailPage() {
   const [, params] = useRoute("/clients/:id");
   const clientId = params?.id;
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
@@ -117,6 +135,72 @@ export default function ClientDetailPage() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  const handleDocumentUpload = async () => {
+    if (!selectedFile || !selectedDocType || !clientId) return;
+    
+    setIsUploading(true);
+    try {
+      // Step 1: Get presigned URL (authenticated)
+      const token = localStorage.getItem("token");
+      const urlResponse = await fetch("/api/uploads/request-url", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: selectedFile.name,
+          size: selectedFile.size,
+          contentType: selectedFile.type || "application/octet-stream",
+        }),
+      });
+      
+      if (!urlResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+      
+      const { uploadURL, objectPath } = await urlResponse.json();
+      
+      // Step 2: Upload file to presigned URL
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: selectedFile,
+        headers: { "Content-Type": selectedFile.type || "application/octet-stream" },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload file");
+      }
+      
+      // Step 3: Save document record
+      await apiRequest("POST", "/api/client-documents", {
+        clientId,
+        documentType: selectedDocType,
+        fileUrl: objectPath,
+        uploadedBy: user?.id,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "documents"] });
+      
+      toast({
+        title: "Document uploaded",
+        description: `${selectedFile.name} has been uploaded successfully.`,
+      });
+      
+      setUploadDialogOpen(false);
+      setSelectedFile(null);
+      setSelectedDocType("");
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (clientLoading) {
@@ -308,15 +392,79 @@ export default function ClientDetailPage() {
 
           <TabsContent value="documents">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
                 <div>
                   <CardTitle className="text-lg">Documents</CardTitle>
                   <CardDescription>Client documents and files</CardDescription>
                 </div>
-                <Button size="sm" data-testid="button-upload-document">
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload
-                </Button>
+                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" data-testid="button-upload-document">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Upload Document</DialogTitle>
+                      <DialogDescription>
+                        Select the document type and upload a file (PDF or image)
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Document Type</Label>
+                        <Select value={selectedDocType} onValueChange={setSelectedDocType}>
+                          <SelectTrigger data-testid="select-doc-type">
+                            <SelectValue placeholder="Select document type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="HS_AWARD">HS Award Letter</SelectItem>
+                            <SelectItem value="LEASE">Lease</SelectItem>
+                            <SelectItem value="POLICY">Policy Signed</SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>File</Label>
+                        <Input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.gif"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          data-testid="input-document-file"
+                        />
+                        {selectedFile && (
+                          <p className="text-sm text-muted-foreground">
+                            Selected: {selectedFile.name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleDocumentUpload}
+                        disabled={!selectedFile || !selectedDocType || isUploading}
+                        data-testid="button-confirm-upload"
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent>
                 {documents && documents.length > 0 ? (
@@ -325,19 +473,26 @@ export default function ClientDetailPage() {
                       <TableRow>
                         <TableHead>Type</TableHead>
                         <TableHead>Uploaded</TableHead>
+                        <TableHead>Uploaded By</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {documents.map((doc) => (
-                        <TableRow key={doc.id}>
+                        <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
                           <TableCell>{getDocumentTypeBadge(doc.documentType)}</TableCell>
                           <TableCell>
                             {new Date(doc.uploadedAt).toLocaleDateString()}
                           </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-sm">
+                              {doc.uploadedBy || "-"}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" asChild>
                               <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="mr-1 h-3 w-3" />
                                 View
                               </a>
                             </Button>
