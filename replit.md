@@ -29,11 +29,19 @@ A comprehensive housing support management system with JWT-based authentication,
 ## Key Features
 1. **Dashboard**: Metrics overview, county distribution, quick actions, recent activity
 2. **Clients**: Full CRUD, filtering by county/service type/status, detailed profile with housing/documents/financials/history tabs
+   - **Documents Tab**: In-page image viewer modal (no download, right-click disabled)
+   - **Financials Tab**: Inline display of monthly data with month navigation (prev/next), summary cards for Housing Support, Rent, Expenses, Pool Fund
 3. **Bulk Updates**: Update housing support, rent, expenses, or LTH for multiple clients at once
+   - Shows current amounts for each client
+   - Warns before overwriting existing data with confirmation dialog
 4. **Reports**: Filterable client reports with CSV export
-5. **Settings**: Manage counties, service types, statuses, payment methods, expense categories
-6. **User Management** (Super Admin): Create/manage admin users
-7. **Audit Logs** (Super Admin): View all system changes with full detail
+5. **Pool Fund**: Dedicated page with:
+   - Monthly/Yearly view toggle
+   - Total pool fund, contributor count, positive/negative balance metrics
+   - Per-client contribution breakdown table
+6. **Settings**: Manage counties, service types, statuses, payment methods, expense categories
+7. **User Management** (Super Admin): Create/manage admin users
+8. **Audit Logs** (Super Admin): View all system changes with full detail
 
 ## Database Schema
 
@@ -89,6 +97,9 @@ A comprehensive housing support management system with JWT-based authentication,
 - `GET/POST/PATCH/DELETE /api/lth-payments`
 - `GET/POST/PATCH/DELETE /api/expenses`
 - `GET/POST/PATCH /api/pool-funds`
+
+### Pool Fund Analytics
+- `GET /api/pool-fund-summary` - Get pool fund metrics and contributions (params: year, month)
 
 ### Audit
 - `GET/POST /api/audit-logs`
