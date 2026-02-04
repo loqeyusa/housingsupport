@@ -143,7 +143,7 @@ export default function ClientDetailPage() {
     setIsUploading(true);
     try {
       // Step 1: Get presigned URL (authenticated)
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("auth_token");
       const urlResponse = await fetch("/api/uploads/request-url", {
         method: "POST",
         headers: { 
