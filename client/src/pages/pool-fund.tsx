@@ -41,8 +41,13 @@ export default function PoolFundPage() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
 
+  // Build URL with inline params to avoid serialization issues
+  const poolFundUrl = viewMode === "monthly"
+    ? `/api/pool-fund-summary?year=${selectedYear}&month=${selectedMonth}`
+    : `/api/pool-fund-summary?year=${selectedYear}`;
+
   const { data: poolFundData, isLoading } = useQuery<PoolFundSummary>({
-    queryKey: ["/api/pool-fund-summary", { year: selectedYear, month: viewMode === "monthly" ? selectedMonth : null }],
+    queryKey: [poolFundUrl],
   });
 
   const formatMonth = (year: number, month: number) => {
