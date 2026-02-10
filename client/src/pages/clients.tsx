@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Filter, Eye } from "lucide-react";
 import type { Client, County, ServiceType, ServiceStatus } from "@shared/schema";
 
-type ClientWithSaStatus = Client & { saStatus?: string };
+type ClientWithSaStatus = Client & { saStatus?: string; saExpiryDate?: string | null; saDaysRemaining?: number | null };
 
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
@@ -63,7 +63,6 @@ export default function ClientsPage() {
     switch (saStatus) {
       case "active": return "Active";
       case "expired": return "Expired";
-      case "expiring_soon": return "Expiring Soon";
       case "suspended": return "Suspended";
       case "override_active": return "Active (Override)";
       default: return "Unknown";
@@ -74,11 +73,19 @@ export default function ClientsPage() {
     switch (saStatus) {
       case "active": return "default";
       case "override_active": return "default";
-      case "expiring_soon": return "secondary";
       case "expired": return "destructive";
       case "suspended": return "destructive";
       default: return "outline";
     }
+  };
+
+  const getExpiryDisplay = (client: ClientWithSaStatus) => {
+    if (!client.saExpiryDate) return <span className="text-muted-foreground">-</span>;
+    const days = client.saDaysRemaining;
+    if (days === null || days === undefined) return <span className="text-muted-foreground">-</span>;
+    if (days < 0) return <span className="text-destructive font-medium">Expired</span>;
+    if (days <= 14) return <span className="text-orange-600 dark:text-orange-400 font-medium">{days} day{days !== 1 ? "s" : ""} remaining</span>;
+    return <span className="text-muted-foreground">{new Date(client.saExpiryDate).toLocaleDateString()}</span>;
   };
 
   const filteredClients = clients?.filter((client) => {
@@ -168,7 +175,6 @@ export default function ClientsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="expiring_soon">Expiring Soon</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
                 </SelectContent>
@@ -204,6 +210,7 @@ export default function ClientsPage() {
                     <TableHead>County</TableHead>
                     <TableHead>Service Type</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Expiry Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -218,6 +225,9 @@ export default function ClientsPage() {
                         <Badge variant={getSaStatusVariant(client.saStatus)} data-testid={`badge-sa-status-${client.id}`}>
                           {getSaStatusLabel(client.saStatus)}
                         </Badge>
+                      </TableCell>
+                      <TableCell data-testid={`text-expiry-${client.id}`}>
+                        {getExpiryDisplay(client)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button

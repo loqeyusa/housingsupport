@@ -216,15 +216,15 @@ export default function ClientDetailPage() {
 
   const getServiceAgreementStatus = () => {
     if (!documents) return null;
-    const saDoc = documents
-      .filter(d => d.documentType === "SERVICE_AGREEMENT" && d.expiryDate)
-      .sort((a, b) => new Date(b.expiryDate!).getTime() - new Date(a.expiryDate!).getTime())[0];
-    if (!saDoc) return null;
+    const saDocs = documents.filter(d => d.documentType === "SERVICE_AGREEMENT");
+    if (saDocs.length === 0) return { status: "suspended", label: "Suspended", daysUntilExpiry: null };
+    const saDocsWithExpiry = saDocs.filter(d => d.expiryDate);
+    if (saDocsWithExpiry.length === 0) return { status: "active", label: "Active", daysUntilExpiry: null };
+    const saDoc = saDocsWithExpiry.sort((a, b) => new Date(b.expiryDate!).getTime() - new Date(a.expiryDate!).getTime())[0];
     const now = new Date();
     const expiry = new Date(saDoc.expiryDate!);
     const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     if (daysUntilExpiry < 0) return { status: "expired", label: "Expired", daysUntilExpiry };
-    if (daysUntilExpiry <= 30) return { status: "expiring_soon", label: `Expires in ${daysUntilExpiry} days`, daysUntilExpiry };
     return { status: "active", label: "Active", daysUntilExpiry };
   };
 

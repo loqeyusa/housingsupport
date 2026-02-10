@@ -967,6 +967,8 @@ export async function registerRoutes(
         const docs = await storage.getClientDocuments(client.id);
         const saDocs = docs.filter((d: any) => d.documentType === "SERVICE_AGREEMENT");
         let saStatus: string | null = null;
+        let saExpiryDate: string | null = null;
+        let saDaysRemaining: number | null = null;
         if (saDocs.length === 0) {
           saStatus = "suspended";
         } else {
@@ -976,17 +978,18 @@ export async function registerRoutes(
           } else {
             const latestSa = saDocsWithExpiry.sort((a: any, b: any) => new Date(b.expiryDate).getTime() - new Date(a.expiryDate).getTime())[0];
             const now = new Date();
-            const expiry = new Date(latestSa.expiryDate);
+            const expiry = new Date(latestSa.expiryDate!);
             const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            saExpiryDate = expiry.toISOString();
+            saDaysRemaining = daysUntilExpiry;
             if (daysUntilExpiry < 0) saStatus = "expired";
-            else if (daysUntilExpiry <= 30) saStatus = "expiring_soon";
             else saStatus = "active";
           }
         }
         if (client.statusOverride === "active" && saStatus !== "active") {
           saStatus = "override_active";
         }
-        return { ...client, saStatus };
+        return { ...client, saStatus, saExpiryDate, saDaysRemaining };
       }));
       res.json(enriched);
     } catch (error) {
