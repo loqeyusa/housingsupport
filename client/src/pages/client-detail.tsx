@@ -105,6 +105,11 @@ export default function ClientDetailPage() {
     enabled: !!clientId,
   });
 
+  const { data: expenseDocsForClient } = useQuery<Array<{ id: string; expenseId: string; clientId: string; clientMonthId: string; fileUrl: string; uploadedBy: string | null; uploadedAt: string }>>({
+    queryKey: ["/api/clients", clientId, "expense-documents"],
+    enabled: !!clientId,
+  });
+
   const { data: clientMonths } = useQuery<ClientMonth[]>({
     queryKey: ["/api/clients", clientId, "months"],
     enabled: !!clientId,
@@ -253,6 +258,14 @@ export default function ClientDetailPage() {
 
   // Document viewing - fetch with auth and display in modal
   const handleViewDocument = async (doc: ClientDocument) => {
+    if (!doc.fileUrl) {
+      toast({
+        title: "No file available",
+        description: "This document record has no file attached.",
+        variant: "destructive",
+      });
+      return;
+    }
     setViewingDocument(doc);
     setIsLoadingDocument(true);
     
@@ -775,7 +788,7 @@ export default function ClientDetailPage() {
                     </div>
                   </div>
                 )}
-                {documents && documents.length > 0 ? (
+                {(documents && documents.length > 0) || (expenseDocsForClient && expenseDocsForClient.length > 0) ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -834,6 +847,41 @@ export default function ClientDetailPage() {
                           </TableCell>
                         </TableRow>
                       ))}
+                      {expenseDocsForClient?.map((edoc) => {
+                        const cm = clientMonths?.find(m => m.id === edoc.clientMonthId);
+                        const monthLabel = cm ? `${getMonthName(cm.month)} ${cm.year}` : "";
+                        return (
+                          <TableRow key={`exp-${edoc.id}`} data-testid={`row-expense-doc-${edoc.id}`}>
+                            <TableCell>
+                              <Badge variant="outline">Expense</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{monthLabel}</span>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(edoc.uploadedAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground text-sm">
+                                {edoc.uploadedBy || "-"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewDocument({ id: edoc.id, clientId: edoc.clientId, documentType: "EXPENSE", fileUrl: edoc.fileUrl, uploadedAt: edoc.uploadedAt, uploadedBy: edoc.uploadedBy, startDate: null, expiryDate: null } as ClientDocument)}
+                                  data-testid={`button-view-expense-doc-${edoc.id}`}
+                                >
+                                  <Eye className="mr-1 h-3 w-3" />
+                                  View
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 ) : (

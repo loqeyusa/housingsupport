@@ -31,7 +31,16 @@ const clientFormSchema = z.object({
   landlordPhone: z.string().optional(),
   landlordEmail: z.string().optional(),
   landlordAddress: z.string().optional(),
-});
+  saStartDate: z.string().optional(),
+  saExpiryDate: z.string().optional(),
+}).refine(
+  (data) => {
+    if (data.saStartDate && !data.saExpiryDate) return false;
+    if (!data.saStartDate && data.saExpiryDate) return false;
+    return true;
+  },
+  { message: "Both SA start date and expiry date must be provided together", path: ["saExpiryDate"] }
+);
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
 
@@ -80,6 +89,8 @@ export default function ClientFormPage() {
       landlordPhone: "",
       landlordEmail: "",
       landlordAddress: "",
+      saStartDate: "",
+      saExpiryDate: "",
     },
   });
 
@@ -387,6 +398,53 @@ export default function ClientFormPage() {
                 />
               </CardContent>
             </Card>
+
+            {!isEditing && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Service Agreement</CardTitle>
+                  <CardDescription>Set the initial service agreement dates for this client</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="saStartDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>SA Start Date</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              data-testid="input-sa-start-date"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="saExpiryDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>SA Expiry Date</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              data-testid="input-sa-expiry-date"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

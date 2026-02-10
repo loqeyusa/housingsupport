@@ -29,8 +29,10 @@ A comprehensive housing support management system with JWT-based authentication,
 ## Key Features
 1. **Dashboard**: Metrics overview with time filters (All Time, By Year, By Month), county distribution, quick actions, recent activity
    - **Remaining Balance**: Cumulative Housing Support received but not yet allocated (no rent AND no expenses for that month)
-2. **Clients**: Full CRUD, filtering by county/service type/status, detailed profile with housing/documents/financials/history tabs
-   - **Documents Tab**: In-page image viewer modal (no download, right-click disabled); Super admins can delete documents
+2. **Clients**: Full CRUD, filtering by county/service type/SA status, detailed profile with housing/documents/financials/history tabs
+   - **SA-Based Status**: Client list status derived from Service Agreement documents - "Suspended" (no SA), "Active", "Expiring Soon" (within 30 days), "Expired", "Active (Override)" for super_admin overrides
+   - **Documents Tab**: In-page image viewer modal (no download, right-click disabled); Super admins can delete documents; expense documents shown with "Expense" badge and month info
+   - **Add Client Form**: Includes optional SA start/expiry date fields to create initial Service Agreement record during client creation
    - **Financials Tab**: Inline display of monthly data with month navigation (prev/next), summary cards for Housing Support, Rent, Expenses, Pool Fund
    - **Financials Grid View**: Yearly overview showing all 12 months with columns (HS, Rent, Expenses, Balance, Pool Fund), click to view details
    - **Pool Fund Display**: Shows $0 when client has HS but no rent/expenses (unallocated funds)

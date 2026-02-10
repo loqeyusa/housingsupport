@@ -12,13 +12,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Filter, Eye } from "lucide-react";
 import type { Client, County, ServiceType, ServiceStatus } from "@shared/schema";
 
+type ClientWithSaStatus = Client & { saStatus?: string };
+
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [countyFilter, setCountyFilter] = useState<string>("all");
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const { data: clients, isLoading } = useQuery<Client[]>({
+  const { data: clients, isLoading } = useQuery<ClientWithSaStatus[]>({
     queryKey: ["/api/clients"],
   });
 
@@ -57,6 +59,28 @@ export default function ClientsPage() {
     return "destructive";
   };
 
+  const getSaStatusLabel = (saStatus?: string) => {
+    switch (saStatus) {
+      case "active": return "Active";
+      case "expired": return "Expired";
+      case "expiring_soon": return "Expiring Soon";
+      case "suspended": return "Suspended";
+      case "override_active": return "Active (Override)";
+      default: return "Unknown";
+    }
+  };
+
+  const getSaStatusVariant = (saStatus?: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (saStatus) {
+      case "active": return "default";
+      case "override_active": return "default";
+      case "expiring_soon": return "secondary";
+      case "expired": return "destructive";
+      case "suspended": return "destructive";
+      default: return "outline";
+    }
+  };
+
   const filteredClients = clients?.filter((client) => {
     const matchesSearch =
       client.fullName.toLowerCase().includes(search.toLowerCase()) ||
@@ -69,7 +93,7 @@ export default function ClientsPage() {
       serviceTypeFilter === "all" || client.serviceTypeId === serviceTypeFilter;
 
     const matchesStatus =
-      statusFilter === "all" || client.serviceStatusId === statusFilter;
+      statusFilter === "all" || client.saStatus === statusFilter || (statusFilter === "active" && client.saStatus === "override_active");
 
     return matchesSearch && matchesCounty && matchesServiceType && matchesStatus;
   });
@@ -143,11 +167,10 @@ export default function ClientsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {serviceStatuses?.map((status) => (
-                    <SelectItem key={status.id} value={status.id}>
-                      {status.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="expiring_soon">Expiring Soon</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -192,8 +215,8 @@ export default function ClientsPage() {
                       <TableCell>{getCountyName(client.countyId)}</TableCell>
                       <TableCell>{getServiceTypeName(client.serviceTypeId)}</TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadgeVariant(client.serviceStatusId) as "default" | "secondary" | "destructive"}>
-                          {getServiceStatusName(client.serviceStatusId)}
+                        <Badge variant={getSaStatusVariant(client.saStatus)} data-testid={`badge-sa-status-${client.id}`}>
+                          {getSaStatusLabel(client.saStatus)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

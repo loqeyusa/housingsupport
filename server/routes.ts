@@ -963,7 +963,32 @@ export async function registerRoutes(
   app.get("/api/clients", async (req, res) => {
     try {
       const clients = await storage.getClients();
-      res.json(clients);
+      const enriched = await Promise.all(clients.map(async (client) => {
+        const docs = await storage.getClientDocuments(client.id);
+        const saDocs = docs.filter((d: any) => d.documentType === "SERVICE_AGREEMENT");
+        let saStatus: string | null = null;
+        if (saDocs.length === 0) {
+          saStatus = "suspended";
+        } else {
+          const saDocsWithExpiry = saDocs.filter((d: any) => d.expiryDate);
+          if (saDocsWithExpiry.length === 0) {
+            saStatus = "active";
+          } else {
+            const latestSa = saDocsWithExpiry.sort((a: any, b: any) => new Date(b.expiryDate).getTime() - new Date(a.expiryDate).getTime())[0];
+            const now = new Date();
+            const expiry = new Date(latestSa.expiryDate);
+            const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (daysUntilExpiry < 0) saStatus = "expired";
+            else if (daysUntilExpiry <= 30) saStatus = "expiring_soon";
+            else saStatus = "active";
+          }
+        }
+        if (client.statusOverride === "active" && saStatus !== "active") {
+          saStatus = "override_active";
+        }
+        return { ...client, saStatus };
+      }));
+      res.json(enriched);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch clients" });
     }
@@ -983,7 +1008,7 @@ export async function registerRoutes(
 
   app.post("/api/clients", async (req, res) => {
     try {
-      const { address, landlordName, landlordPhone, landlordEmail, landlordAddress, ...clientData } = req.body;
+      const { address, landlordName, landlordPhone, landlordEmail, landlordAddress, saStartDate, saExpiryDate, ...clientData } = req.body;
       const parsed = insertClientSchema.safeParse(clientData);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
@@ -998,6 +1023,17 @@ export async function registerRoutes(
           landlordPhone: landlordPhone || null,
           landlordEmail: landlordEmail || null,
           landlordAddress: landlordAddress || null,
+        });
+      }
+
+      if (saStartDate || saExpiryDate) {
+        await storage.createClientDocument({
+          clientId: client.id,
+          documentType: "SERVICE_AGREEMENT",
+          fileUrl: "",
+          uploadedBy: null,
+          startDate: saStartDate ? new Date(saStartDate) : null,
+          expiryDate: saExpiryDate ? new Date(saExpiryDate) : null,
         });
       }
       
@@ -1026,13 +1062,14 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const client = await storage.updateClient(req.params.id, parsed.data);
+      const id = req.params.id as string;
+      const client = await storage.updateClient(id, parsed.data);
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
       
       if (address !== undefined || landlordName !== undefined || landlordPhone !== undefined || landlordEmail !== undefined || landlordAddress !== undefined) {
-        const existingHousing = await storage.getClientHousing(req.params.id);
+        const existingHousing = await storage.getClientHousing(id);
         if (existingHousing) {
           await storage.updateClientHousing(existingHousing.id, {
             address: address ?? existingHousing.address,
@@ -1043,7 +1080,7 @@ export async function registerRoutes(
           });
         } else {
           await storage.createClientHousing({
-            clientId: req.params.id,
+            clientId: id,
             address: address || null,
             landlordName: landlordName || null,
             landlordPhone: landlordPhone || null,
@@ -1143,7 +1180,14 @@ export async function registerRoutes(
 
   app.post("/api/client-documents", async (req, res) => {
     try {
-      const parsed = insertClientDocumentSchema.safeParse(req.body);
+      const body = { ...req.body };
+      if (body.startDate && typeof body.startDate === "string") {
+        body.startDate = new Date(body.startDate);
+      }
+      if (body.expiryDate && typeof body.expiryDate === "string") {
+        body.expiryDate = new Date(body.expiryDate);
+      }
+      const parsed = insertClientDocumentSchema.safeParse(body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
@@ -1438,6 +1482,15 @@ export async function registerRoutes(
   app.get("/api/expenses/:expenseId/documents", async (req, res) => {
     try {
       const documents = await storage.getExpenseDocuments(req.params.expenseId);
+      res.json(documents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expense documents" });
+    }
+  });
+
+  app.get("/api/clients/:clientId/expense-documents", async (req, res) => {
+    try {
+      const documents = await storage.getExpenseDocumentsByClient(req.params.clientId as string);
       res.json(documents);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expense documents" });

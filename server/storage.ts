@@ -150,6 +150,7 @@ export interface IStorage {
   // Expense Documents
   getExpenseDocuments(expenseId: string): Promise<ExpenseDocument[]>;
   getExpenseDocumentsByClientMonth(clientMonthId: string): Promise<ExpenseDocument[]>;
+  getExpenseDocumentsByClient(clientId: string): Promise<ExpenseDocument[]>;
   createExpenseDocument(doc: InsertExpenseDocument): Promise<ExpenseDocument>;
   deleteExpenseDocument(id: string): Promise<void>;
 
@@ -462,6 +463,10 @@ export class DatabaseStorage implements IStorage {
 
   async getExpenseDocumentsByClientMonth(clientMonthId: string): Promise<ExpenseDocument[]> {
     return db.select().from(expenseDocuments).where(eq(expenseDocuments.clientMonthId, clientMonthId));
+  }
+
+  async getExpenseDocumentsByClient(clientId: string): Promise<ExpenseDocument[]> {
+    return db.select().from(expenseDocuments).where(eq(expenseDocuments.clientId, clientId));
   }
 
   async createExpenseDocument(doc: InsertExpenseDocument): Promise<ExpenseDocument> {
