@@ -800,7 +800,7 @@ export default function ClientDetailPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {documents.map((doc) => (
+                      {documents?.map((doc) => (
                         <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
                           <TableCell>{getDocumentTypeBadge(doc.documentType)}</TableCell>
                           <TableCell>
@@ -871,7 +871,7 @@ export default function ClientDetailPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleViewDocument({ id: edoc.id, clientId: edoc.clientId, documentType: "EXPENSE", fileUrl: edoc.fileUrl, uploadedAt: edoc.uploadedAt, uploadedBy: edoc.uploadedBy, startDate: null, expiryDate: null } as ClientDocument)}
+                                  onClick={() => handleViewDocument({ id: edoc.id, clientId: edoc.clientId, documentType: "OTHER", fileUrl: edoc.fileUrl, uploadedAt: edoc.uploadedAt, uploadedBy: edoc.uploadedBy, startDate: null, expiryDate: null } as unknown as ClientDocument)}
                                   data-testid={`button-view-expense-doc-${edoc.id}`}
                                 >
                                   <Eye className="mr-1 h-3 w-3" />
