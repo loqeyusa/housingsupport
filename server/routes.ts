@@ -781,12 +781,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldCounty = await storage.getCounty(req.params.id);
-      const county = await storage.updateCounty(req.params.id, parsed.data);
+      const oldCounty = await storage.getCounty(req.params.id as string);
+      const county = await storage.updateCounty(req.params.id as string, parsed.data);
       if (!county) {
         return res.status(404).json({ error: "County not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "county", req.params.id, oldCounty, county);
+      await createAuditEntry(req.user?.userId || null, "update", "county", req.params.id as string, oldCounty, county);
       res.json(county);
     } catch (error) {
       res.status(500).json({ error: "Failed to update county" });
@@ -837,12 +837,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldServiceType = await storage.getServiceType(req.params.id);
-      const serviceType = await storage.updateServiceType(req.params.id, parsed.data);
+      const oldServiceType = await storage.getServiceType(req.params.id as string);
+      const serviceType = await storage.updateServiceType(req.params.id as string, parsed.data);
       if (!serviceType) {
         return res.status(404).json({ error: "Service type not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "service_type", req.params.id, oldServiceType, serviceType);
+      await createAuditEntry(req.user?.userId || null, "update", "service_type", req.params.id as string, oldServiceType, serviceType);
       res.json(serviceType);
     } catch (error) {
       res.status(500).json({ error: "Failed to update service type" });
@@ -893,12 +893,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldServiceStatus = await storage.getServiceStatus(req.params.id);
-      const serviceStatus = await storage.updateServiceStatus(req.params.id, parsed.data);
+      const oldServiceStatus = await storage.getServiceStatus(req.params.id as string);
+      const serviceStatus = await storage.updateServiceStatus(req.params.id as string, parsed.data);
       if (!serviceStatus) {
         return res.status(404).json({ error: "Service status not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "service_status", req.params.id, oldServiceStatus, serviceStatus);
+      await createAuditEntry(req.user?.userId || null, "update", "service_status", req.params.id as string, oldServiceStatus, serviceStatus);
       res.json(serviceStatus);
     } catch (error) {
       res.status(500).json({ error: "Failed to update service status" });
@@ -949,12 +949,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldPaymentMethod = await storage.getPaymentMethod(req.params.id);
-      const paymentMethod = await storage.updatePaymentMethod(req.params.id, parsed.data);
+      const oldPaymentMethod = await storage.getPaymentMethod(req.params.id as string);
+      const paymentMethod = await storage.updatePaymentMethod(req.params.id as string, parsed.data);
       if (!paymentMethod) {
         return res.status(404).json({ error: "Payment method not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "payment_method", req.params.id, oldPaymentMethod, paymentMethod);
+      await createAuditEntry(req.user?.userId || null, "update", "payment_method", req.params.id as string, oldPaymentMethod, paymentMethod);
       res.json(paymentMethod);
     } catch (error) {
       res.status(500).json({ error: "Failed to update payment method" });
@@ -1005,12 +1005,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldExpenseCategory = await storage.getExpenseCategory(req.params.id);
-      const expenseCategory = await storage.updateExpenseCategory(req.params.id, parsed.data);
+      const oldExpenseCategory = await storage.getExpenseCategory(req.params.id as string);
+      const expenseCategory = await storage.updateExpenseCategory(req.params.id as string, parsed.data);
       if (!expenseCategory) {
         return res.status(404).json({ error: "Expense category not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "expense_category", req.params.id, oldExpenseCategory, expenseCategory);
+      await createAuditEntry(req.user?.userId || null, "update", "expense_category", req.params.id as string, oldExpenseCategory, expenseCategory);
       res.json(expenseCategory);
     } catch (error) {
       res.status(500).json({ error: "Failed to update expense category" });
@@ -1408,12 +1408,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldSupport = await storage.getHousingSupportById(req.params.id);
-      const support = await storage.updateHousingSupport(req.params.id, parsed.data);
+      const oldSupport = await storage.getHousingSupportById(req.params.id as string);
+      const support = await storage.updateHousingSupport(req.params.id as string, parsed.data);
       if (!support) {
         return res.status(404).json({ error: "Housing support not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "housing_support", req.params.id, oldSupport, support);
+      await createAuditEntry(req.user?.userId || null, "update", "housing_support", req.params.id as string, oldSupport, support);
       if (oldSupport) {
         const clientMonth = await storage.getClientMonth(oldSupport.clientMonthId);
         if (clientMonth && oldSupport.amount !== support.amount) {
@@ -1473,12 +1473,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldPayment = await storage.getRentPaymentById(req.params.id);
-      const payment = await storage.updateRentPayment(req.params.id, parsed.data);
+      const oldPayment = await storage.getRentPaymentById(req.params.id as string);
+      const payment = await storage.updateRentPayment(req.params.id as string, parsed.data);
       if (!payment) {
         return res.status(404).json({ error: "Rent payment not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "rent_payment", req.params.id, oldPayment, payment);
+      await createAuditEntry(req.user?.userId || null, "update", "rent_payment", req.params.id as string, oldPayment, payment);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth && oldPayment.paidAmount !== payment.paidAmount) {
@@ -1535,12 +1535,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldPayment = await storage.getLthPaymentById(req.params.id);
-      const payment = await storage.updateLthPayment(req.params.id, parsed.data);
+      const oldPayment = await storage.getLthPaymentById(req.params.id as string);
+      const payment = await storage.updateLthPayment(req.params.id as string, parsed.data);
       if (!payment) {
         return res.status(404).json({ error: "LTH payment not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "lth_payment", req.params.id, oldPayment, payment);
+      await createAuditEntry(req.user?.userId || null, "update", "lth_payment", req.params.id as string, oldPayment, payment);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth && oldPayment.amount !== payment.amount) {
@@ -1555,9 +1555,9 @@ export async function registerRoutes(
 
   app.delete("/api/lth-payments/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
-      const oldPayment = await storage.getLthPaymentById(req.params.id);
-      await storage.deleteLthPayment(req.params.id);
-      await createAuditEntry(req.user?.userId || null, "delete", "lth_payment", req.params.id, oldPayment, null);
+      const oldPayment = await storage.getLthPaymentById(req.params.id as string);
+      await storage.deleteLthPayment(req.params.id as string);
+      await createAuditEntry(req.user?.userId || null, "delete", "lth_payment", req.params.id as string, oldPayment, null);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth) {
@@ -1614,12 +1614,12 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const oldExpense = await storage.getExpenseById(req.params.id);
-      const expense = await storage.updateExpense(req.params.id, parsed.data);
+      const oldExpense = await storage.getExpenseById(req.params.id as string);
+      const expense = await storage.updateExpense(req.params.id as string, parsed.data);
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "expense", req.params.id, oldExpense, expense);
+      await createAuditEntry(req.user?.userId || null, "update", "expense", req.params.id as string, oldExpense, expense);
       if (oldExpense) {
         const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
         if (clientMonth && oldExpense.amount !== expense.amount) {
@@ -1634,9 +1634,9 @@ export async function registerRoutes(
 
   app.delete("/api/expenses/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
-      const oldExpense = await storage.getExpenseById(req.params.id);
-      await storage.deleteExpense(req.params.id);
-      await createAuditEntry(req.user?.userId || null, "delete", "expense", req.params.id, oldExpense, null);
+      const oldExpense = await storage.getExpenseById(req.params.id as string);
+      await storage.deleteExpense(req.params.id as string);
+      await createAuditEntry(req.user?.userId || null, "delete", "expense", req.params.id as string, oldExpense, null);
       if (oldExpense) {
         const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
         if (clientMonth) {

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FileText, Search, Eye, Filter } from "lucide-react";
+import { FileText, Search, Eye, Filter, ArrowRight, Plus, Minus } from "lucide-react";
 import type { AuditLog, User } from "@shared/schema";
 
 export default function AuditLogsPage() {
@@ -62,13 +62,77 @@ export default function AuditLogsPage() {
     return matchesUser && matchesEntity && matchesAction && matchesSearch;
   });
 
-  const formatJson = (data: unknown) => {
-    if (!data) return "null";
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
+  const FIELD_LABELS: Record<string, string> = {
+    id: "ID",
+    clientMonthId: "Month",
+    categoryId: "Category",
+    amount: "Amount",
+    expenseDate: "Date",
+    notes: "Notes",
+    fullName: "Full Name",
+    phone: "Phone",
+    countyCaseNumber: "County Case Number",
+    countyId: "County",
+    serviceTypeId: "Service Type",
+    serviceStatusId: "Service Status",
+    isActive: "Active",
+    statusOverride: "Status Override",
+    statusOverrideBy: "Override By",
+    statusOverrideAt: "Override At",
+    createdAt: "Created At",
+    address: "Address",
+    landlordName: "Landlord Name",
+    landlordPhone: "Landlord Phone",
+    landlordEmail: "Landlord Email",
+    landlordAddress: "Landlord Address",
+    documentType: "Document Type",
+    fileUrl: "File URL",
+    uploadedBy: "Uploaded By",
+    startDate: "Start Date",
+    expiryDate: "Expiry Date",
+    name: "Name",
+    email: "Email",
+    role: "Role",
+    paymentMethodId: "Payment Method",
+    rentAmount: "Rent Amount",
+    paymentDate: "Payment Date",
+    year: "Year",
+    month: "Month",
+    isLocked: "Locked",
+    clientId: "Client",
+  };
+
+  const HIDDEN_FIELDS = new Set(["id", "clientMonthId", "password"]);
+
+  const formatFieldValue = (key: string, value: unknown): string => {
+    if (value === null || value === undefined) return "-";
+    if (key === "amount" || key === "rentAmount") return `$${value}`;
+    if (key === "isActive" || key === "isLocked") return value ? "Yes" : "No";
+    if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return new Date(value).toLocaleDateString();
     }
+    return String(value);
+  };
+
+  const getChangedFields = (oldData: Record<string, unknown> | null, newData: Record<string, unknown> | null) => {
+    if (!oldData && !newData) return [];
+    const allData = newData || oldData || {};
+    const keys = Object.keys(allData).filter(k => !HIDDEN_FIELDS.has(k));
+    
+    if (!oldData) {
+      return keys.map(k => ({ field: k, label: FIELD_LABELS[k] || k, oldVal: null, newVal: allData[k], changed: true }));
+    }
+    if (!newData) {
+      return keys.map(k => ({ field: k, label: FIELD_LABELS[k] || k, oldVal: allData[k], newVal: null, changed: true }));
+    }
+    
+    return keys.map(k => ({
+      field: k,
+      label: FIELD_LABELS[k] || k,
+      oldVal: oldData[k],
+      newVal: newData[k],
+      changed: String(oldData[k] ?? "") !== String(newData[k] ?? ""),
+    }));
   };
 
   return (
@@ -217,22 +281,85 @@ export default function AuditLogsPage() {
                                   <p className="font-mono text-xs break-all">{log.entityId || "-"}</p>
                                 </div>
                               </div>
-                              <div className="space-y-2">
-                                <Label className="text-muted-foreground">Old Value</Label>
-                                <ScrollArea className="h-32 rounded-md border p-3">
-                                  <pre className="text-xs font-mono">
-                                    {formatJson(log.oldData)}
-                                  </pre>
-                                </ScrollArea>
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-muted-foreground">New Value</Label>
-                                <ScrollArea className="h-32 rounded-md border p-3">
-                                  <pre className="text-xs font-mono">
-                                    {formatJson(log.newData)}
-                                  </pre>
-                                </ScrollArea>
-                              </div>
+
+                              {log.actionType === "create" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-sm font-medium">
+                                    <Plus className="h-4 w-4 text-green-600" />
+                                    Created Record
+                                  </div>
+                                  <ScrollArea className="max-h-[300px]">
+                                    <div className="rounded-md border">
+                                      {getChangedFields(null, log.newData as Record<string, unknown>).map((f, i) => (
+                                        <div key={f.field} className={`flex items-center gap-3 px-3 py-2 text-sm ${i > 0 ? "border-t" : ""}`}>
+                                          <span className="text-muted-foreground min-w-[140px]">{f.label}</span>
+                                          <span className="font-medium">{formatFieldValue(f.field, f.newVal)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ScrollArea>
+                                </div>
+                              )}
+
+                              {log.actionType === "update" && (() => {
+                                const fields = getChangedFields(
+                                  log.oldData as Record<string, unknown>,
+                                  log.newData as Record<string, unknown>
+                                );
+                                const changed = fields.filter(f => f.changed);
+                                const unchanged = fields.filter(f => !f.changed);
+                                return (
+                                  <div className="space-y-3">
+                                    {changed.length > 0 && (
+                                      <div className="space-y-2">
+                                        <div className="text-sm font-medium">Changes</div>
+                                        <div className="rounded-md border">
+                                          {changed.map((f, i) => (
+                                            <div key={f.field} className={`flex flex-wrap items-center gap-2 px-3 py-2 text-sm bg-muted/30 ${i > 0 ? "border-t" : ""}`}>
+                                              <span className="text-muted-foreground min-w-[140px]">{f.label}</span>
+                                              <span className="line-through text-red-500/80">{formatFieldValue(f.field, f.oldVal)}</span>
+                                              <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                              <span className="font-medium text-green-600">{formatFieldValue(f.field, f.newVal)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {unchanged.length > 0 && (
+                                      <div className="space-y-2">
+                                        <div className="text-sm text-muted-foreground">Unchanged Fields</div>
+                                        <div className="rounded-md border">
+                                          {unchanged.map((f, i) => (
+                                            <div key={f.field} className={`flex items-center gap-3 px-3 py-2 text-sm ${i > 0 ? "border-t" : ""}`}>
+                                              <span className="text-muted-foreground min-w-[140px]">{f.label}</span>
+                                              <span>{formatFieldValue(f.field, f.newVal)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              {log.actionType === "delete" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-sm font-medium">
+                                    <Minus className="h-4 w-4 text-red-600" />
+                                    Deleted Record
+                                  </div>
+                                  <ScrollArea className="max-h-[300px]">
+                                    <div className="rounded-md border">
+                                      {getChangedFields(log.oldData as Record<string, unknown>, null).map((f, i) => (
+                                        <div key={f.field} className={`flex items-center gap-3 px-3 py-2 text-sm ${i > 0 ? "border-t" : ""}`}>
+                                          <span className="text-muted-foreground min-w-[140px]">{f.label}</span>
+                                          <span className="line-through text-red-500/80">{formatFieldValue(f.field, f.oldVal)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ScrollArea>
+                                </div>
+                              )}
                             </div>
                           </DialogContent>
                         </Dialog>
