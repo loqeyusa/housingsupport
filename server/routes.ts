@@ -41,6 +41,35 @@ export async function registerRoutes(
   // Register object storage routes for document uploads
   registerObjectStorageRoutes(app);
 
+  async function createAuditEntry(userId: string | null, actionType: string, entity: string, entityId: string | null, oldData: any, newData: any) {
+    try {
+      await storage.createAuditLog({
+        userId,
+        actionType,
+        entity,
+        entityId,
+        oldData,
+        newData,
+      });
+    } catch (e) {
+      console.error("Failed to create audit log:", e);
+    }
+  }
+
+  async function trackClientChange(clientId: string, fieldChanged: string, oldValue: string | null, newValue: string | null, changedBy: string | null) {
+    try {
+      await storage.createClientHistory({
+        clientId,
+        fieldChanged,
+        oldValue,
+        newValue,
+        changedBy,
+      });
+    } catch (e) {
+      console.error("Failed to create client history:", e);
+    }
+  }
+
   async function isServiceAgreementBlocked(clientId: string, userRole?: string): Promise<boolean> {
     if (userRole === "super_admin") return false;
     const docs = await storage.getClientDocuments(clientId);
@@ -347,6 +376,15 @@ export async function registerRoutes(
       await storage.createActivity({
         message: `Bulk ${financialType.replace("_", " ")} update for ${updatedCount} clients - ${new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
         relatedClientId: null,
+      });
+
+      await createAuditEntry(req.user?.userId || null, "create", financialType, null, null, {
+        type: "bulk_update",
+        financialType,
+        year,
+        month,
+        updatedCount,
+        clientIds,
       });
 
       res.json({ success: true, updatedCount });
@@ -661,6 +699,9 @@ export async function registerRoutes(
       });
       
       const { password: _, ...userWithoutPassword } = user;
+
+      await createAuditEntry(req.user?.userId || null, "create", "user", user.id, null, userWithoutPassword);
+
       res.status(201).json(userWithoutPassword);
     } catch (error) {
       console.error("Create user error:", error);
@@ -675,6 +716,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors });
       }
       
+      const oldUser = await storage.getUser(req.params.id as string);
       const updateData = { ...parsed.data };
       if (updateData.password) {
         updateData.password = await hashPassword(updateData.password);
@@ -686,6 +728,9 @@ export async function registerRoutes(
       }
       
       const { password: _, ...userWithoutPassword } = user;
+      const { password: _old, ...oldUserWithoutPassword } = oldUser || {} as any;
+      await createAuditEntry(req.user?.userId || null, "update", "user", req.params.id as string, oldUserWithoutPassword, userWithoutPassword);
+
       res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
@@ -716,29 +761,32 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/counties", async (req, res) => {
+  app.post("/api/counties", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertCountySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const county = await storage.createCounty(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "county", county.id, null, county);
       res.status(201).json(county);
     } catch (error) {
       res.status(500).json({ error: "Failed to create county" });
     }
   });
 
-  app.patch("/api/counties/:id", async (req, res) => {
+  app.patch("/api/counties/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertCountySchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldCounty = await storage.getCounty(req.params.id);
       const county = await storage.updateCounty(req.params.id, parsed.data);
       if (!county) {
         return res.status(404).json({ error: "County not found" });
       }
+      await createAuditEntry(req.user?.userId || null, "update", "county", req.params.id, oldCounty, county);
       res.json(county);
     } catch (error) {
       res.status(500).json({ error: "Failed to update county" });
@@ -769,29 +817,32 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/service-types", async (req, res) => {
+  app.post("/api/service-types", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertServiceTypeSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const serviceType = await storage.createServiceType(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "service_type", serviceType.id, null, serviceType);
       res.status(201).json(serviceType);
     } catch (error) {
       res.status(500).json({ error: "Failed to create service type" });
     }
   });
 
-  app.patch("/api/service-types/:id", async (req, res) => {
+  app.patch("/api/service-types/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertServiceTypeSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldServiceType = await storage.getServiceType(req.params.id);
       const serviceType = await storage.updateServiceType(req.params.id, parsed.data);
       if (!serviceType) {
         return res.status(404).json({ error: "Service type not found" });
       }
+      await createAuditEntry(req.user?.userId || null, "update", "service_type", req.params.id, oldServiceType, serviceType);
       res.json(serviceType);
     } catch (error) {
       res.status(500).json({ error: "Failed to update service type" });
@@ -822,29 +873,32 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/service-statuses", async (req, res) => {
+  app.post("/api/service-statuses", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertServiceStatusSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const serviceStatus = await storage.createServiceStatus(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "service_status", serviceStatus.id, null, serviceStatus);
       res.status(201).json(serviceStatus);
     } catch (error) {
       res.status(500).json({ error: "Failed to create service status" });
     }
   });
 
-  app.patch("/api/service-statuses/:id", async (req, res) => {
+  app.patch("/api/service-statuses/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertServiceStatusSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldServiceStatus = await storage.getServiceStatus(req.params.id);
       const serviceStatus = await storage.updateServiceStatus(req.params.id, parsed.data);
       if (!serviceStatus) {
         return res.status(404).json({ error: "Service status not found" });
       }
+      await createAuditEntry(req.user?.userId || null, "update", "service_status", req.params.id, oldServiceStatus, serviceStatus);
       res.json(serviceStatus);
     } catch (error) {
       res.status(500).json({ error: "Failed to update service status" });
@@ -875,29 +929,32 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/payment-methods", async (req, res) => {
+  app.post("/api/payment-methods", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertPaymentMethodSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const paymentMethod = await storage.createPaymentMethod(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "payment_method", paymentMethod.id, null, paymentMethod);
       res.status(201).json(paymentMethod);
     } catch (error) {
       res.status(500).json({ error: "Failed to create payment method" });
     }
   });
 
-  app.patch("/api/payment-methods/:id", async (req, res) => {
+  app.patch("/api/payment-methods/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertPaymentMethodSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldPaymentMethod = await storage.getPaymentMethod(req.params.id);
       const paymentMethod = await storage.updatePaymentMethod(req.params.id, parsed.data);
       if (!paymentMethod) {
         return res.status(404).json({ error: "Payment method not found" });
       }
+      await createAuditEntry(req.user?.userId || null, "update", "payment_method", req.params.id, oldPaymentMethod, paymentMethod);
       res.json(paymentMethod);
     } catch (error) {
       res.status(500).json({ error: "Failed to update payment method" });
@@ -928,29 +985,32 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/expense-categories", async (req, res) => {
+  app.post("/api/expense-categories", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertExpenseCategorySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const expenseCategory = await storage.createExpenseCategory(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "expense_category", expenseCategory.id, null, expenseCategory);
       res.status(201).json(expenseCategory);
     } catch (error) {
       res.status(500).json({ error: "Failed to create expense category" });
     }
   });
 
-  app.patch("/api/expense-categories/:id", async (req, res) => {
+  app.patch("/api/expense-categories/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertExpenseCategorySchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldExpenseCategory = await storage.getExpenseCategory(req.params.id);
       const expenseCategory = await storage.updateExpenseCategory(req.params.id, parsed.data);
       if (!expenseCategory) {
         return res.status(404).json({ error: "Expense category not found" });
       }
+      await createAuditEntry(req.user?.userId || null, "update", "expense_category", req.params.id, oldExpenseCategory, expenseCategory);
       res.json(expenseCategory);
     } catch (error) {
       res.status(500).json({ error: "Failed to update expense category" });
@@ -1009,7 +1069,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/clients", async (req, res) => {
+  app.post("/api/clients", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const { address, landlordName, landlordPhone, landlordEmail, landlordAddress, saStartDate, saExpiryDate, ...clientData } = req.body;
       const parsed = insertClientSchema.safeParse(clientData);
@@ -1045,6 +1105,9 @@ export async function registerRoutes(
         message: `New client added: ${client.fullName}`,
         relatedClientId: client.id,
       });
+
+      await createAuditEntry(req.user?.userId || null, "create", "client", client.id, null, client);
+      await trackClientChange(client.id, "Client Created", null, client.fullName, req.user?.userId || null);
       
       res.status(201).json(client);
     } catch (error) {
@@ -1066,6 +1129,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors });
       }
       const id = req.params.id as string;
+      const oldClient = await storage.getClient(id);
       const client = await storage.updateClient(id, parsed.data);
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
@@ -1090,6 +1154,27 @@ export async function registerRoutes(
             landlordEmail: landlordEmail || null,
             landlordAddress: landlordAddress || null,
           });
+        }
+      }
+
+      await createAuditEntry(req.user?.userId || null, "update", "client", id, oldClient, client);
+      if (oldClient) {
+        const fieldsToCompare: { key: keyof typeof oldClient; label: string }[] = [
+          { key: "fullName", label: "Full Name" },
+          { key: "phone", label: "Phone" },
+          { key: "countyCaseNumber", label: "County Case Number" },
+          { key: "countyId", label: "County" },
+          { key: "serviceTypeId", label: "Service Type" },
+          { key: "serviceStatusId", label: "Service Status" },
+          { key: "isActive", label: "Active Status" },
+          { key: "statusOverride", label: "Status Override" },
+        ];
+        for (const field of fieldsToCompare) {
+          const oldVal = oldClient[field.key];
+          const newVal = client[field.key];
+          if (String(oldVal ?? "") !== String(newVal ?? "")) {
+            await trackClientChange(id, field.label, String(oldVal ?? ""), String(newVal ?? ""), req.user?.userId || null);
+          }
         }
       }
       
@@ -1181,7 +1266,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/client-documents", async (req, res) => {
+  app.post("/api/client-documents", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const body = { ...req.body };
       if (body.startDate && typeof body.startDate === "string") {
@@ -1195,6 +1280,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors });
       }
       const document = await storage.createClientDocument(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "document", document.id, null, document);
+      if (parsed.data.clientId) {
+        await trackClientChange(parsed.data.clientId, "Document Uploaded", null, parsed.data.documentType, req.user?.userId || null);
+      }
       res.status(201).json(document);
     } catch (error) {
       res.status(500).json({ error: "Failed to create client document" });
@@ -1207,7 +1296,12 @@ export async function registerRoutes(
       if (req.user?.role !== "super_admin") {
         return res.status(403).json({ error: "Only super admins can delete documents" });
       }
+      const oldDoc = await storage.getClientDocumentById(req.params.id as string);
       await storage.deleteClientDocument(req.params.id as string);
+      await createAuditEntry(req.user?.userId || null, "delete", "document", req.params.id as string, oldDoc, null);
+      if (oldDoc?.clientId) {
+        await trackClientChange(oldDoc.clientId, "Document Deleted", oldDoc.documentType, null, req.user?.userId || null);
+      }
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete client document" });
@@ -1295,21 +1389,36 @@ export async function registerRoutes(
         }
       }
       const support = await storage.createHousingSupport(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "housing_support", support.id, null, support);
+      if (parsed.data.clientMonthId) {
+        const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "Housing Support Added", null, `$${parsed.data.amount}`, req.user?.userId || null);
+        }
+      }
       res.status(201).json(support);
     } catch (error) {
       res.status(500).json({ error: "Failed to create housing support" });
     }
   });
 
-  app.patch("/api/housing-supports/:id", async (req, res) => {
+  app.patch("/api/housing-supports/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertHousingSupportSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldSupport = await storage.getHousingSupportById(req.params.id);
       const support = await storage.updateHousingSupport(req.params.id, parsed.data);
       if (!support) {
         return res.status(404).json({ error: "Housing support not found" });
+      }
+      await createAuditEntry(req.user?.userId || null, "update", "housing_support", req.params.id, oldSupport, support);
+      if (oldSupport) {
+        const clientMonth = await storage.getClientMonth(oldSupport.clientMonthId);
+        if (clientMonth && oldSupport.amount !== support.amount) {
+          await trackClientChange(clientMonth.clientId, "Housing Support", `$${oldSupport.amount}`, `$${support.amount}`, req.user?.userId || null);
+        }
       }
       res.json(support);
     } catch (error) {
@@ -1345,21 +1454,36 @@ export async function registerRoutes(
         }
       }
       const payment = await storage.createRentPayment(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "rent_payment", payment.id, null, payment);
+      if (parsed.data.clientMonthId) {
+        const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "Rent Payment Added", null, `$${parsed.data.paidAmount || "0"}`, req.user?.userId || null);
+        }
+      }
       res.status(201).json(payment);
     } catch (error) {
       res.status(500).json({ error: "Failed to create rent payment" });
     }
   });
 
-  app.patch("/api/rent-payments/:id", async (req, res) => {
+  app.patch("/api/rent-payments/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertRentPaymentSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldPayment = await storage.getRentPaymentById(req.params.id);
       const payment = await storage.updateRentPayment(req.params.id, parsed.data);
       if (!payment) {
         return res.status(404).json({ error: "Rent payment not found" });
+      }
+      await createAuditEntry(req.user?.userId || null, "update", "rent_payment", req.params.id, oldPayment, payment);
+      if (oldPayment) {
+        const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
+        if (clientMonth && oldPayment.paidAmount !== payment.paidAmount) {
+          await trackClientChange(clientMonth.clientId, "Rent Payment", `$${oldPayment.paidAmount || "0"}`, `$${payment.paidAmount || "0"}`, req.user?.userId || null);
+        }
       }
       res.json(payment);
     } catch (error) {
@@ -1392,21 +1516,36 @@ export async function registerRoutes(
         }
       }
       const payment = await storage.createLthPayment(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "lth_payment", payment.id, null, payment);
+      if (parsed.data.clientMonthId) {
+        const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "LTH Payment Added", null, `$${parsed.data.amount}`, req.user?.userId || null);
+        }
+      }
       res.status(201).json(payment);
     } catch (error) {
       res.status(500).json({ error: "Failed to create LTH payment" });
     }
   });
 
-  app.patch("/api/lth-payments/:id", async (req, res) => {
+  app.patch("/api/lth-payments/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertLthPaymentSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldPayment = await storage.getLthPaymentById(req.params.id);
       const payment = await storage.updateLthPayment(req.params.id, parsed.data);
       if (!payment) {
         return res.status(404).json({ error: "LTH payment not found" });
+      }
+      await createAuditEntry(req.user?.userId || null, "update", "lth_payment", req.params.id, oldPayment, payment);
+      if (oldPayment) {
+        const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
+        if (clientMonth && oldPayment.amount !== payment.amount) {
+          await trackClientChange(clientMonth.clientId, "LTH Payment", `$${oldPayment.amount}`, `$${payment.amount}`, req.user?.userId || null);
+        }
       }
       res.json(payment);
     } catch (error) {
@@ -1414,9 +1553,17 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/lth-payments/:id", async (req, res) => {
+  app.delete("/api/lth-payments/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
+      const oldPayment = await storage.getLthPaymentById(req.params.id);
       await storage.deleteLthPayment(req.params.id);
+      await createAuditEntry(req.user?.userId || null, "delete", "lth_payment", req.params.id, oldPayment, null);
+      if (oldPayment) {
+        const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "LTH Payment Deleted", `$${oldPayment.amount}`, null, req.user?.userId || null);
+        }
+      }
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete LTH payment" });
@@ -1448,21 +1595,36 @@ export async function registerRoutes(
         }
       }
       const expense = await storage.createExpense(parsed.data);
+      await createAuditEntry(req.user?.userId || null, "create", "expense", expense.id, null, expense);
+      if (parsed.data.clientMonthId) {
+        const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "Expense Added", null, `$${parsed.data.amount}`, req.user?.userId || null);
+        }
+      }
       res.status(201).json(expense);
     } catch (error) {
       res.status(500).json({ error: "Failed to create expense" });
     }
   });
 
-  app.patch("/api/expenses/:id", async (req, res) => {
+  app.patch("/api/expenses/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertExpenseSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      const oldExpense = await storage.getExpenseById(req.params.id);
       const expense = await storage.updateExpense(req.params.id, parsed.data);
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
+      }
+      await createAuditEntry(req.user?.userId || null, "update", "expense", req.params.id, oldExpense, expense);
+      if (oldExpense) {
+        const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
+        if (clientMonth && oldExpense.amount !== expense.amount) {
+          await trackClientChange(clientMonth.clientId, "Expense", `$${oldExpense.amount}`, `$${expense.amount}`, req.user?.userId || null);
+        }
       }
       res.json(expense);
     } catch (error) {
@@ -1470,9 +1632,17 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/expenses/:id", async (req, res) => {
+  app.delete("/api/expenses/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
+      const oldExpense = await storage.getExpenseById(req.params.id);
       await storage.deleteExpense(req.params.id);
+      await createAuditEntry(req.user?.userId || null, "delete", "expense", req.params.id, oldExpense, null);
+      if (oldExpense) {
+        const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
+        if (clientMonth) {
+          await trackClientChange(clientMonth.clientId, "Expense Deleted", `$${oldExpense.amount}`, null, req.user?.userId || null);
+        }
+      }
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });

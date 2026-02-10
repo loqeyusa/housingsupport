@@ -115,6 +115,7 @@ export interface IStorage {
 
   // Client Documents
   getClientDocuments(clientId: string): Promise<ClientDocument[]>;
+  getClientDocumentById(id: string): Promise<ClientDocument | undefined>;
   createClientDocument(document: InsertClientDocument): Promise<ClientDocument>;
   deleteClientDocument(id: string): Promise<void>;
 
@@ -127,22 +128,26 @@ export interface IStorage {
 
   // Housing Supports
   getHousingSupport(clientMonthId: string): Promise<HousingSupport | undefined>;
+  getHousingSupportById(id: string): Promise<HousingSupport | undefined>;
   createHousingSupport(support: InsertHousingSupport): Promise<HousingSupport>;
   updateHousingSupport(id: string, support: Partial<InsertHousingSupport>): Promise<HousingSupport | undefined>;
 
   // Rent Payments
   getRentPayment(clientMonthId: string): Promise<RentPayment | undefined>;
+  getRentPaymentById(id: string): Promise<RentPayment | undefined>;
   createRentPayment(payment: InsertRentPayment): Promise<RentPayment>;
   updateRentPayment(id: string, payment: Partial<InsertRentPayment>): Promise<RentPayment | undefined>;
 
   // LTH Payments
   getLthPayments(clientMonthId: string): Promise<LthPayment[]>;
+  getLthPaymentById(id: string): Promise<LthPayment | undefined>;
   createLthPayment(payment: InsertLthPayment): Promise<LthPayment>;
   updateLthPayment(id: string, payment: Partial<InsertLthPayment>): Promise<LthPayment | undefined>;
   deleteLthPayment(id: string): Promise<void>;
 
   // Expenses
   getExpenses(clientMonthId: string): Promise<Expense[]>;
+  getExpenseById(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<void>;
@@ -345,6 +350,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(clientDocuments).where(eq(clientDocuments.clientId, clientId));
   }
 
+  async getClientDocumentById(id: string): Promise<ClientDocument | undefined> {
+    const [doc] = await db.select().from(clientDocuments).where(eq(clientDocuments.id, id));
+    return doc;
+  }
+
   async createClientDocument(document: InsertClientDocument): Promise<ClientDocument> {
     const [newDoc] = await db.insert(clientDocuments).values(document).returning();
     return newDoc;
@@ -391,6 +401,11 @@ export class DatabaseStorage implements IStorage {
     return support;
   }
 
+  async getHousingSupportById(id: string): Promise<HousingSupport | undefined> {
+    const [support] = await db.select().from(housingSupports).where(eq(housingSupports.id, id));
+    return support;
+  }
+
   async createHousingSupport(support: InsertHousingSupport): Promise<HousingSupport> {
     const [newSupport] = await db.insert(housingSupports).values(support).returning();
     return newSupport;
@@ -407,6 +422,11 @@ export class DatabaseStorage implements IStorage {
     return payment;
   }
 
+  async getRentPaymentById(id: string): Promise<RentPayment | undefined> {
+    const [payment] = await db.select().from(rentPayments).where(eq(rentPayments.id, id));
+    return payment;
+  }
+
   async createRentPayment(payment: InsertRentPayment): Promise<RentPayment> {
     const [newPayment] = await db.insert(rentPayments).values(payment).returning();
     return newPayment;
@@ -420,6 +440,11 @@ export class DatabaseStorage implements IStorage {
   // LTH Payments
   async getLthPayments(clientMonthId: string): Promise<LthPayment[]> {
     return db.select().from(lthPayments).where(eq(lthPayments.clientMonthId, clientMonthId));
+  }
+
+  async getLthPaymentById(id: string): Promise<LthPayment | undefined> {
+    const [payment] = await db.select().from(lthPayments).where(eq(lthPayments.id, id));
+    return payment;
   }
 
   async createLthPayment(payment: InsertLthPayment): Promise<LthPayment> {
@@ -439,6 +464,11 @@ export class DatabaseStorage implements IStorage {
   // Expenses
   async getExpenses(clientMonthId: string): Promise<Expense[]> {
     return db.select().from(expenses).where(eq(expenses.clientMonthId, clientMonthId));
+  }
+
+  async getExpenseById(id: string): Promise<Expense | undefined> {
+    const [expense] = await db.select().from(expenses).where(eq(expenses.id, id));
+    return expense;
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
