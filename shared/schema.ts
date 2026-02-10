@@ -15,7 +15,7 @@ import { z } from "zod";
 
 // Enums
 export const userRoleEnum = pgEnum("user_role", ["admin", "super_admin"]);
-export const documentTypeEnum = pgEnum("document_type", ["HS_AWARD", "LEASE", "POLICY", "OTHER"]);
+export const documentTypeEnum = pgEnum("document_type", ["HS_AWARD", "LEASE", "POLICY", "OTHER", "SERVICE_AGREEMENT"]);
 
 // ============================================
 // 2.1 Users (admins only)
@@ -125,6 +125,9 @@ export const clients = pgTable("clients", {
   countyId: varchar("county_id", { length: 36 }).references(() => counties.id),
   serviceTypeId: varchar("service_type_id", { length: 36 }).references(() => serviceTypes.id),
   serviceStatusId: varchar("service_status_id", { length: 36 }).references(() => serviceStatuses.id),
+  statusOverride: text("status_override"),
+  statusOverrideBy: varchar("status_override_by", { length: 36 }).references(() => users.id),
+  statusOverrideAt: timestamp("status_override_at"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -167,6 +170,7 @@ export const clientHousings = pgTable("client_housings", {
   address: text("address"),
   landlordName: text("landlord_name"),
   landlordPhone: text("landlord_phone"),
+  landlordEmail: text("landlord_email"),
   landlordAddress: text("landlord_address"),
 });
 
@@ -185,6 +189,8 @@ export const clientDocuments = pgTable("client_documents", {
   clientId: varchar("client_id", { length: 36 }).notNull().references(() => clients.id),
   documentType: documentTypeEnum("document_type").notNull(),
   fileUrl: text("file_url").notNull(),
+  startDate: timestamp("start_date"),
+  expiryDate: timestamp("expiry_date"),
   uploadedBy: varchar("uploaded_by", { length: 36 }).references(() => users.id),
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
@@ -283,6 +289,25 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
 
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
+
+// 3.5b Expense Documents (proof of expense)
+export const expenseDocuments = pgTable("expense_documents", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  expenseId: varchar("expense_id", { length: 36 }).notNull().references(() => expenses.id),
+  clientId: varchar("client_id", { length: 36 }).notNull().references(() => clients.id),
+  clientMonthId: varchar("client_month_id", { length: 36 }).notNull().references(() => clientMonths.id),
+  fileUrl: text("file_url").notNull(),
+  uploadedBy: varchar("uploaded_by", { length: 36 }).references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
+export const insertExpenseDocumentSchema = createInsertSchema(expenseDocuments).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export type InsertExpenseDocument = z.infer<typeof insertExpenseDocumentSchema>;
+export type ExpenseDocument = typeof expenseDocuments.$inferSelect;
 
 // 3.6 Pool fund (derived but stored)
 export const poolFunds = pgTable("pool_funds", {

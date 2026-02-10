@@ -16,6 +16,7 @@ import {
   rentPayments,
   lthPayments,
   expenses,
+  expenseDocuments,
   poolFunds,
   auditLogs,
   activities,
@@ -49,6 +50,8 @@ import {
   type InsertLthPayment,
   type Expense,
   type InsertExpense,
+  type ExpenseDocument,
+  type InsertExpenseDocument,
   type PoolFund,
   type InsertPoolFund,
   type AuditLog,
@@ -143,6 +146,12 @@ export interface IStorage {
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<void>;
+
+  // Expense Documents
+  getExpenseDocuments(expenseId: string): Promise<ExpenseDocument[]>;
+  getExpenseDocumentsByClientMonth(clientMonthId: string): Promise<ExpenseDocument[]>;
+  createExpenseDocument(doc: InsertExpenseDocument): Promise<ExpenseDocument>;
+  deleteExpenseDocument(id: string): Promise<void>;
 
   // Pool Funds
   getPoolFund(clientMonthId: string): Promise<PoolFund | undefined>;
@@ -442,7 +451,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteExpense(id: string): Promise<void> {
+    await db.delete(expenseDocuments).where(eq(expenseDocuments.expenseId, id));
     await db.delete(expenses).where(eq(expenses.id, id));
+  }
+
+  // Expense Documents
+  async getExpenseDocuments(expenseId: string): Promise<ExpenseDocument[]> {
+    return db.select().from(expenseDocuments).where(eq(expenseDocuments.expenseId, expenseId));
+  }
+
+  async getExpenseDocumentsByClientMonth(clientMonthId: string): Promise<ExpenseDocument[]> {
+    return db.select().from(expenseDocuments).where(eq(expenseDocuments.clientMonthId, clientMonthId));
+  }
+
+  async createExpenseDocument(doc: InsertExpenseDocument): Promise<ExpenseDocument> {
+    const [newDoc] = await db.insert(expenseDocuments).values(doc).returning();
+    return newDoc;
+  }
+
+  async deleteExpenseDocument(id: string): Promise<void> {
+    await db.delete(expenseDocuments).where(eq(expenseDocuments.id, id));
   }
 
   // Pool Funds

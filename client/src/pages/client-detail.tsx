@@ -39,6 +39,7 @@ import {
   Grid3X3,
   List,
   Trash2,
+  Mail,
 } from "lucide-react";
 import type {
   Client,
@@ -63,6 +64,8 @@ export default function ClientDetailPage() {
   const [selectedDocType, setSelectedDocType] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [docStartDate, setDocStartDate] = useState<string>("");
+  const [docExpiryDate, setDocExpiryDate] = useState<string>("");
   
   // Document viewer state
   const [viewingDocument, setViewingDocument] = useState<ClientDocument | null>(null);
@@ -189,12 +192,14 @@ export default function ClientDetailPage() {
       HS_AWARD: "default",
       LEASE: "secondary",
       POLICY: "outline",
+      SERVICE_AGREEMENT: "default",
       OTHER: "outline",
     };
     const labels: Record<string, string> = {
       HS_AWARD: "HS Award Letter",
       LEASE: "Lease",
       POLICY: "Policy Signed",
+      SERVICE_AGREEMENT: "Service Agreement",
       OTHER: "Other",
     };
     return (
@@ -203,6 +208,23 @@ export default function ClientDetailPage() {
       </Badge>
     );
   };
+
+  const getServiceAgreementStatus = () => {
+    if (!documents) return null;
+    const saDoc = documents
+      .filter(d => d.documentType === "SERVICE_AGREEMENT" && d.expiryDate)
+      .sort((a, b) => new Date(b.expiryDate!).getTime() - new Date(a.expiryDate!).getTime())[0];
+    if (!saDoc) return null;
+    const now = new Date();
+    const expiry = new Date(saDoc.expiryDate!);
+    const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysUntilExpiry < 0) return { status: "expired", label: "Expired", daysUntilExpiry };
+    if (daysUntilExpiry <= 30) return { status: "expiring_soon", label: `Expires in ${daysUntilExpiry} days`, daysUntilExpiry };
+    return { status: "active", label: "Active", daysUntilExpiry };
+  };
+
+  const serviceAgreementStatus = getServiceAgreementStatus();
+  const hasOverride = client?.statusOverride === "active";
 
   const formatMonth = (year: number, month: number) => {
     return new Date(year, month - 1).toLocaleDateString("en-US", {
@@ -344,13 +366,18 @@ export default function ClientDetailPage() {
         throw new Error("Failed to upload file");
       }
       
-      // Step 3: Save document record
-      await apiRequest("POST", "/api/client-documents", {
+      const docRecord: any = {
         clientId,
         documentType: selectedDocType,
         fileUrl: objectPath,
         uploadedBy: user?.id,
-      });
+      };
+      if (selectedDocType === "SERVICE_AGREEMENT") {
+        if (docStartDate) docRecord.startDate = new Date(docStartDate).toISOString();
+        if (docExpiryDate) docRecord.expiryDate = new Date(docExpiryDate).toISOString();
+      }
+      
+      await apiRequest("POST", "/api/client-documents", docRecord);
       
       queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "documents"] });
       
@@ -362,6 +389,8 @@ export default function ClientDetailPage() {
       setUploadDialogOpen(false);
       setSelectedFile(null);
       setSelectedDocType("");
+      setDocStartDate("");
+      setDocExpiryDate("");
     } catch (error) {
       toast({
         title: "Upload failed",
@@ -564,6 +593,13 @@ export default function ClientDetailPage() {
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
+                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Landlord Email</p>
+                          <p className="font-medium" data-testid="text-landlord-email">{housing.landlordEmail || "-"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
                         <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
                         <div>
                           <p className="text-sm text-muted-foreground">Landlord Address</p>
@@ -613,10 +649,33 @@ export default function ClientDetailPage() {
                             <SelectItem value="HS_AWARD">HS Award Letter</SelectItem>
                             <SelectItem value="LEASE">Lease</SelectItem>
                             <SelectItem value="POLICY">Policy Signed</SelectItem>
+                            <SelectItem value="SERVICE_AGREEMENT">Service Agreement</SelectItem>
                             <SelectItem value="OTHER">Other</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                      {selectedDocType === "SERVICE_AGREEMENT" && (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Start Date</Label>
+                            <Input
+                              type="date"
+                              value={docStartDate}
+                              onChange={(e) => setDocStartDate(e.target.value)}
+                              data-testid="input-doc-start-date"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Expiry Date</Label>
+                            <Input
+                              type="date"
+                              value={docExpiryDate}
+                              onChange={(e) => setDocExpiryDate(e.target.value)}
+                              data-testid="input-doc-expiry-date"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label>File</Label>
                         <Input
@@ -658,11 +717,70 @@ export default function ClientDetailPage() {
                 </Dialog>
               </CardHeader>
               <CardContent>
+                {serviceAgreementStatus && (
+                  <div className={`mb-4 p-3 rounded-md border ${
+                    serviceAgreementStatus.status === "expired" && !hasOverride
+                      ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+                      : serviceAgreementStatus.status === "expiring_soon"
+                      ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
+                      : "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  }`}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={
+                          serviceAgreementStatus.status === "expired" && !hasOverride
+                            ? "destructive"
+                            : serviceAgreementStatus.status === "expiring_soon"
+                            ? "secondary"
+                            : "default"
+                        } data-testid="badge-sa-status">
+                          {serviceAgreementStatus.label}
+                        </Badge>
+                        {hasOverride && serviceAgreementStatus.status === "expired" && (
+                          <Badge variant="outline" data-testid="badge-sa-override">Override Active</Badge>
+                        )}
+                      </div>
+                      {serviceAgreementStatus.status === "expired" && !hasOverride && (
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          Financial edits are blocked - service agreement has expired
+                        </p>
+                      )}
+                      {serviceAgreementStatus.status === "expired" && user?.role === "super_admin" && (
+                        <Button
+                          size="sm"
+                          variant={hasOverride ? "destructive" : "outline"}
+                          onClick={async () => {
+                            try {
+                              await apiRequest("PATCH", `/api/clients/${clientId}`, {
+                                statusOverride: hasOverride ? null : "active",
+                                statusOverrideBy: hasOverride ? null : user?.id,
+                                statusOverrideAt: hasOverride ? null : new Date().toISOString(),
+                              });
+                              queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId] });
+                              toast({
+                                title: hasOverride ? "Override removed" : "Override activated",
+                                description: hasOverride
+                                  ? "Financial editing is now blocked for this client."
+                                  : "Financial editing is now allowed despite expired service agreement.",
+                              });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to update override.", variant: "destructive" });
+                            }
+                          }}
+                          data-testid="button-toggle-sa-override"
+                        >
+                          {hasOverride ? "Remove Override" : "Enable Override"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {documents && documents.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Type</TableHead>
+                        <TableHead>Dates</TableHead>
                         <TableHead>Uploaded</TableHead>
                         <TableHead>Uploaded By</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -672,6 +790,16 @@ export default function ClientDetailPage() {
                       {documents.map((doc) => (
                         <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
                           <TableCell>{getDocumentTypeBadge(doc.documentType)}</TableCell>
+                          <TableCell>
+                            {doc.documentType === "SERVICE_AGREEMENT" && (doc.startDate || doc.expiryDate) ? (
+                              <div className="text-sm">
+                                {doc.startDate && <div>Start: {new Date(doc.startDate).toLocaleDateString()}</div>}
+                                {doc.expiryDate && <div>Expiry: {new Date(doc.expiryDate).toLocaleDateString()}</div>}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {new Date(doc.uploadedAt).toLocaleDateString()}
                           </TableCell>

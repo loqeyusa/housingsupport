@@ -17,7 +17,8 @@ import {
   ChevronRight,
   DollarSign,
 } from "lucide-react";
-import type { Client } from "@shared/schema";
+import type { Client, County } from "@shared/schema";
+import { Filter } from "lucide-react";
 
 interface PoolFundSummary {
   totalPoolFund: number;
@@ -40,11 +41,15 @@ export default function PoolFundPage() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
+  const [countyFilter, setCountyFilter] = useState<string>("all");
 
-  // Build URL with inline params to avoid serialization issues
+  const { data: counties } = useQuery<County[]>({
+    queryKey: ["/api/counties"],
+  });
+
   const poolFundUrl = viewMode === "monthly"
-    ? `/api/pool-fund-summary?year=${selectedYear}&month=${selectedMonth}`
-    : `/api/pool-fund-summary?year=${selectedYear}`;
+    ? `/api/pool-fund-summary?year=${selectedYear}&month=${selectedMonth}${countyFilter !== "all" ? `&countyId=${countyFilter}` : ""}`
+    : `/api/pool-fund-summary?year=${selectedYear}${countyFilter !== "all" ? `&countyId=${countyFilter}` : ""}`;
 
   const { data: poolFundData, isLoading } = useQuery<PoolFundSummary>({
     queryKey: [poolFundUrl],
@@ -88,8 +93,22 @@ export default function PoolFundPage() {
               Track pool fund contributions and balances
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
+          <div className="flex flex-wrap items-center gap-4">
+            <Select value={countyFilter} onValueChange={setCountyFilter}>
+              <SelectTrigger className="w-[180px]" data-testid="select-county-filter">
+                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Filter by County" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Counties</SelectItem>
+                {counties?.map((county) => (
+                  <SelectItem key={county.id} value={county.id}>
+                    {county.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <div className="flex items-center gap-2">
               <Button
                 variant={viewMode === "monthly" ? "default" : "outline"}

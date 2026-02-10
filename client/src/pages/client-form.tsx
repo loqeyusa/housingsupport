@@ -29,6 +29,7 @@ const clientFormSchema = z.object({
   address: z.string().optional(),
   landlordName: z.string().optional(),
   landlordPhone: z.string().optional(),
+  landlordEmail: z.string().optional(),
   landlordAddress: z.string().optional(),
 });
 
@@ -47,7 +48,7 @@ export default function ClientFormPage() {
     enabled: !!clientId && isEditing,
   });
 
-  const { data: housing } = useQuery<{ address?: string; landlordName?: string; landlordPhone?: string; landlordAddress?: string } | null>({
+  const { data: housing } = useQuery<{ address?: string; landlordName?: string; landlordPhone?: string; landlordEmail?: string; landlordAddress?: string } | null>({
     queryKey: ["/api/clients", clientId, "housing"],
     enabled: !!clientId && isEditing,
   });
@@ -77,6 +78,7 @@ export default function ClientFormPage() {
       address: "",
       landlordName: "",
       landlordPhone: "",
+      landlordEmail: "",
       landlordAddress: "",
     },
   });
@@ -94,6 +96,7 @@ export default function ClientFormPage() {
         address: housing?.address || "",
         landlordName: housing?.landlordName || "",
         landlordPhone: housing?.landlordPhone || "",
+        landlordEmail: housing?.landlordEmail || "",
         landlordAddress: housing?.landlordAddress || "",
       });
     }
@@ -152,6 +155,7 @@ export default function ClientFormPage() {
       address: data.address || undefined,
       landlordName: data.landlordName || undefined,
       landlordPhone: data.landlordPhone || undefined,
+      landlordEmail: data.landlordEmail || undefined,
       landlordAddress: data.landlordAddress || undefined,
     };
 
@@ -444,6 +448,24 @@ export default function ClientFormPage() {
                     )}
                   />
                 </div>
+                <FormField
+                  control={form.control}
+                  name="landlordEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Landlord Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter landlord email"
+                          type="email"
+                          data-testid="input-landlord-email"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="landlordAddress"

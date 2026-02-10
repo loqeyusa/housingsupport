@@ -17,6 +17,7 @@ import {
   insertRentPaymentSchema,
   insertLthPaymentSchema,
   insertExpenseSchema,
+  insertExpenseDocumentSchema,
   insertPoolFundSchema,
   insertAuditLogSchema,
   insertActivitySchema,
@@ -39,6 +40,20 @@ export async function registerRoutes(
   
   // Register object storage routes for document uploads
   registerObjectStorageRoutes(app);
+
+  async function isServiceAgreementBlocked(clientId: string, userRole?: string): Promise<boolean> {
+    if (userRole === "super_admin") return false;
+    const docs = await storage.getClientDocuments(clientId);
+    const saDoc = docs
+      .filter(d => d.documentType === "SERVICE_AGREEMENT" && d.expiryDate)
+      .sort((a, b) => new Date(b.expiryDate!).getTime() - new Date(a.expiryDate!).getTime())[0];
+    if (!saDoc) return false;
+    const expiry = new Date(saDoc.expiryDate!);
+    if (expiry >= new Date()) return false;
+    const client = await storage.getClient(clientId);
+    if (client?.statusOverride === "active") return false;
+    return true;
+  }
   
   // ============================================
   // Authentication
@@ -417,20 +432,23 @@ export async function registerRoutes(
     try {
       const year = parseInt(req.query.year as string);
       const month = req.query.month ? parseInt(req.query.month as string) : null;
+      const countyId = req.query.countyId as string | undefined;
 
       if (isNaN(year)) {
         return res.status(400).json({ error: "Year is required" });
       }
 
-      const clients = await storage.getClients();
+      const allClients = await storage.getClients();
       const counties = await storage.getCounties();
       const contributions: any[] = [];
+      
+      const filteredClients = countyId ? allClients.filter(c => c.countyId === countyId) : allClients;
       
       let totalPoolFund = 0;
       let positiveContributors = 0;
       let negativeContributors = 0;
 
-      for (const client of clients) {
+      for (const client of filteredClients) {
         // Get all client months for this year (or specific month)
         const clientMonths = await storage.getClientMonths(client.id);
         const relevantMonths = clientMonths.filter(cm => {
@@ -965,20 +983,20 @@ export async function registerRoutes(
 
   app.post("/api/clients", async (req, res) => {
     try {
-      const { address, landlordName, landlordPhone, landlordAddress, ...clientData } = req.body;
+      const { address, landlordName, landlordPhone, landlordEmail, landlordAddress, ...clientData } = req.body;
       const parsed = insertClientSchema.safeParse(clientData);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const client = await storage.createClient(parsed.data);
       
-      // Create housing record if any housing data provided
-      if (address || landlordName || landlordPhone || landlordAddress) {
+      if (address || landlordName || landlordPhone || landlordEmail || landlordAddress) {
         await storage.createClientHousing({
           clientId: client.id,
           address: address || null,
           landlordName: landlordName || null,
           landlordPhone: landlordPhone || null,
+          landlordEmail: landlordEmail || null,
           landlordAddress: landlordAddress || null,
         });
       }
@@ -996,9 +1014,14 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/clients/:id", async (req, res) => {
+  app.patch("/api/clients/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
-      const { address, landlordName, landlordPhone, landlordAddress, ...clientData } = req.body;
+      const { address, landlordName, landlordPhone, landlordEmail, landlordAddress, ...clientData } = req.body;
+      if (clientData.statusOverride !== undefined || clientData.statusOverrideBy !== undefined || clientData.statusOverrideAt !== undefined) {
+        if (req.user?.role !== "super_admin") {
+          return res.status(403).json({ error: "Only super admins can modify status override" });
+        }
+      }
       const parsed = insertClientSchema.partial().safeParse(clientData);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
@@ -1008,14 +1031,14 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Client not found" });
       }
       
-      // Update or create housing record
-      if (address !== undefined || landlordName !== undefined || landlordPhone !== undefined || landlordAddress !== undefined) {
+      if (address !== undefined || landlordName !== undefined || landlordPhone !== undefined || landlordEmail !== undefined || landlordAddress !== undefined) {
         const existingHousing = await storage.getClientHousing(req.params.id);
         if (existingHousing) {
           await storage.updateClientHousing(existingHousing.id, {
             address: address ?? existingHousing.address,
             landlordName: landlordName ?? existingHousing.landlordName,
             landlordPhone: landlordPhone ?? existingHousing.landlordPhone,
+            landlordEmail: landlordEmail ?? existingHousing.landlordEmail,
             landlordAddress: landlordAddress ?? existingHousing.landlordAddress,
           });
         } else {
@@ -1024,6 +1047,7 @@ export async function registerRoutes(
             address: address || null,
             landlordName: landlordName || null,
             landlordPhone: landlordPhone || null,
+            landlordEmail: landlordEmail || null,
             landlordAddress: landlordAddress || null,
           });
         }
@@ -1211,11 +1235,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/housing-supports", async (req, res) => {
+  app.post("/api/housing-supports", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertHousingSupportSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
+      }
+      if (parsed.data.clientMonthId) {
+        const cm = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (cm && await isServiceAgreementBlocked(cm.clientId, req.user?.role)) {
+          return res.status(403).json({ error: "Financial edits blocked - service agreement expired" });
+        }
       }
       const support = await storage.createHousingSupport(parsed.data);
       res.status(201).json(support);
@@ -1255,11 +1285,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rent-payments", async (req, res) => {
+  app.post("/api/rent-payments", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertRentPaymentSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
+      }
+      if (parsed.data.clientMonthId) {
+        const cm = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (cm && await isServiceAgreementBlocked(cm.clientId, req.user?.role)) {
+          return res.status(403).json({ error: "Financial edits blocked - service agreement expired" });
+        }
       }
       const payment = await storage.createRentPayment(parsed.data);
       res.status(201).json(payment);
@@ -1296,11 +1332,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/lth-payments", async (req, res) => {
+  app.post("/api/lth-payments", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertLthPaymentSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
+      }
+      if (parsed.data.clientMonthId) {
+        const cm = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (cm && await isServiceAgreementBlocked(cm.clientId, req.user?.role)) {
+          return res.status(403).json({ error: "Financial edits blocked - service agreement expired" });
+        }
       }
       const payment = await storage.createLthPayment(parsed.data);
       res.status(201).json(payment);
@@ -1346,11 +1388,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/expenses", async (req, res) => {
+  app.post("/api/expenses", authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = insertExpenseSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
+      }
+      if (parsed.data.clientMonthId) {
+        const cm = await storage.getClientMonth(parsed.data.clientMonthId);
+        if (cm && await isServiceAgreementBlocked(cm.clientId, req.user?.role)) {
+          return res.status(403).json({ error: "Financial edits blocked - service agreement expired" });
+        }
       }
       const expense = await storage.createExpense(parsed.data);
       res.status(201).json(expense);
@@ -1381,6 +1429,49 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // ============================================
+  // Expense Documents
+  // ============================================
+  app.get("/api/expenses/:expenseId/documents", async (req, res) => {
+    try {
+      const documents = await storage.getExpenseDocuments(req.params.expenseId);
+      res.json(documents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expense documents" });
+    }
+  });
+
+  app.get("/api/client-months/:clientMonthId/expense-documents", async (req, res) => {
+    try {
+      const documents = await storage.getExpenseDocumentsByClientMonth(req.params.clientMonthId);
+      res.json(documents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expense documents" });
+    }
+  });
+
+  app.post("/api/expense-documents", async (req, res) => {
+    try {
+      const parsed = insertExpenseDocumentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const document = await storage.createExpenseDocument(parsed.data);
+      res.status(201).json(document);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create expense document" });
+    }
+  });
+
+  app.delete("/api/expense-documents/:id", authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      await storage.deleteExpenseDocument(req.params.id as string);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete expense document" });
     }
   });
 

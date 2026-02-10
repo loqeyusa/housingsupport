@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Plus, Trash2, DollarSign, Home, Calendar, Lock, Unlock } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ArrowLeft, Save, Plus, Trash2, DollarSign, Home, Calendar, Lock, Unlock, Upload, FileText, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -28,6 +28,8 @@ export default function ClientMonthEditPage() {
   const [rentPayment, setRentPayment] = useState({ id: "", paidAmount: "" });
   const [lthPayments, setLthPayments] = useState<Array<{ id: string; amount: string; isNew?: boolean }>>([]);
   const [expenses, setExpenses] = useState<Array<{ id: string; amount: string; categoryId: string; notes: string; isNew?: boolean }>>([]);
+  const [uploadingExpenseId, setUploadingExpenseId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clientMonth, isLoading: monthLoading } = useQuery<{
     id: string;
@@ -70,6 +72,34 @@ export default function ClientMonthEditPage() {
   const { data: expenseCategories } = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["/api/expense-categories"],
   });
+
+  const { data: expenseDocsData } = useQuery<Array<{ id: string; expenseId: string; fileUrl: string; uploadedAt: string }>>({
+    queryKey: [`/api/client-months/${monthId}/expense-documents`],
+    enabled: !!monthId,
+  });
+
+  const { data: clientDocuments } = useQuery<Array<{ id: string; documentType: string; expiryDate: string | null }>>({
+    queryKey: ["/api/clients", clientId, "documents"],
+    enabled: !!clientId,
+  });
+
+  const { data: clientData } = useQuery<{ statusOverride: string | null }>({
+    queryKey: ["/api/clients", clientId],
+    enabled: !!clientId,
+  });
+
+  const isServiceAgreementExpired = (() => {
+    if (!clientDocuments) return false;
+    const saDoc = clientDocuments
+      .filter(d => d.documentType === "SERVICE_AGREEMENT" && d.expiryDate)
+      .sort((a, b) => new Date(b.expiryDate!).getTime() - new Date(a.expiryDate!).getTime())[0];
+    if (!saDoc) return false;
+    const expiry = new Date(saDoc.expiryDate!);
+    return expiry < new Date();
+  })();
+
+  const hasStatusOverride = clientData?.statusOverride === "active";
+  const isBlockedByExpiredSA = isServiceAgreementExpired && !hasStatusOverride && user?.role !== "super_admin";
 
   useEffect(() => {
     if (housingSupportData) {
@@ -177,8 +207,67 @@ export default function ClientMonthEditPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-months", monthId, "expenses"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/client-months/${monthId}/expense-documents`] });
     },
   });
+
+  const deleteExpenseDocMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = localStorage.getItem("auth_token");
+      return fetch(`/api/expense-documents/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/client-months/${monthId}/expense-documents`] });
+    },
+  });
+
+  const handleExpenseDocUpload = async (file: File, expenseId: string) => {
+    setUploadingExpenseId(expenseId);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const urlResponse = await fetch("/api/uploads/request-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type || "application/octet-stream",
+        }),
+      });
+
+      if (!urlResponse.ok) throw new Error("Failed to get upload URL");
+      const { uploadURL, objectPath } = await urlResponse.json();
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+
+      if (!uploadResponse.ok) throw new Error("Failed to upload file");
+
+      await apiRequest("POST", "/api/expense-documents", {
+        expenseId,
+        clientId,
+        clientMonthId: monthId,
+        fileUrl: objectPath,
+        uploadedBy: user?.id,
+      });
+
+      queryClient.invalidateQueries({ queryKey: [`/api/client-months/${monthId}/expense-documents`] });
+      toast({ title: "Document uploaded", description: `${file.name} attached to expense.` });
+    } catch (error) {
+      toast({ title: "Upload failed", description: "Failed to upload expense document.", variant: "destructive" });
+    } finally {
+      setUploadingExpenseId(null);
+    }
+  };
 
   const handleSaveAll = async () => {
     try {
@@ -307,6 +396,16 @@ export default function ClientMonthEditPage() {
         </Card>
       )}
 
+      {isBlockedByExpiredSA && (
+        <Card className="border-destructive">
+          <CardContent className="py-4">
+            <p className="text-destructive text-sm">
+              Financial edits are blocked because the client's service agreement has expired. Contact a super admin for override.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -326,7 +425,7 @@ export default function ClientMonthEditPage() {
                 placeholder="0.00"
                 value={housingSupport.amount}
                 onChange={(e) => setHousingSupport({ ...housingSupport, amount: e.target.value })}
-                disabled={isLocked}
+                disabled={isLocked || isBlockedByExpiredSA}
                 data-testid="input-housing-support"
               />
             </div>
@@ -353,7 +452,7 @@ export default function ClientMonthEditPage() {
                 placeholder="0.00"
                 value={rentPayment.paidAmount}
                 onChange={(e) => setRentPayment({ ...rentPayment, paidAmount: e.target.value })}
-                disabled={isLocked}
+                disabled={isLocked || isBlockedByExpiredSA}
                 data-testid="input-rent-amount"
               />
             </div>
@@ -388,7 +487,7 @@ export default function ClientMonthEditPage() {
                         updated[index].amount = e.target.value;
                         setLthPayments(updated);
                       }}
-                      disabled={isLocked}
+                      disabled={isLocked || isBlockedByExpiredSA}
                       data-testid={`input-lth-amount-${index}`}
                     />
                   </div>
@@ -396,7 +495,7 @@ export default function ClientMonthEditPage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeLthPayment(index)}
-                    disabled={isLocked}
+                    disabled={isLocked || isBlockedByExpiredSA}
                     data-testid={`button-remove-lth-${index}`}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -408,7 +507,7 @@ export default function ClientMonthEditPage() {
               variant="outline"
               size="sm"
               onClick={addLthPayment}
-              disabled={isLocked}
+              disabled={isLocked || isBlockedByExpiredSA}
               data-testid="button-add-lth"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -431,83 +530,136 @@ export default function ClientMonthEditPage() {
             {expenses.length === 0 ? (
               <p className="text-sm text-muted-foreground">No expenses for this month</p>
             ) : (
-              expenses.map((expense, index) => (
-                <div key={expense.id} className="flex gap-4 items-end">
-                  <div className="flex-1 grid gap-2">
-                    <Label>Amount</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={expense.amount}
-                      onChange={(e) => {
-                        const updated = [...expenses];
-                        updated[index].amount = e.target.value;
-                        setExpenses(updated);
-                      }}
-                      disabled={isLocked}
-                      data-testid={`input-expense-amount-${index}`}
-                    />
-                  </div>
-                  <div className="flex-1 grid gap-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={expense.categoryId}
-                      onValueChange={(value) => {
-                        const updated = [...expenses];
-                        updated[index].categoryId = value;
-                        setExpenses(updated);
-                      }}
-                      disabled={isLocked}
-                    >
-                      <SelectTrigger data-testid={`select-expense-category-${index}`}>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseCategories?.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </SelectItem>
+              expenses.map((expense, index) => {
+                const docs = expenseDocsData?.filter(d => d.expenseId === expense.id) || [];
+                return (
+                  <div key={expense.id} className="space-y-2">
+                    <div className="flex gap-4 items-end">
+                      <div className="flex-1 grid gap-2">
+                        <Label>Amount</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={expense.amount}
+                          onChange={(e) => {
+                            const updated = [...expenses];
+                            updated[index].amount = e.target.value;
+                            setExpenses(updated);
+                          }}
+                          disabled={isLocked || isBlockedByExpiredSA}
+                          data-testid={`input-expense-amount-${index}`}
+                        />
+                      </div>
+                      <div className="flex-1 grid gap-2">
+                        <Label>Category</Label>
+                        <Select
+                          value={expense.categoryId}
+                          onValueChange={(value) => {
+                            const updated = [...expenses];
+                            updated[index].categoryId = value;
+                            setExpenses(updated);
+                          }}
+                          disabled={isLocked || isBlockedByExpiredSA}
+                        >
+                          <SelectTrigger data-testid={`select-expense-category-${index}`}>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {expenseCategories?.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex-1 grid gap-2">
+                        <Label>Notes</Label>
+                        <Input
+                          placeholder="Notes (optional)"
+                          value={expense.notes}
+                          onChange={(e) => {
+                            const updated = [...expenses];
+                            updated[index].notes = e.target.value;
+                            setExpenses(updated);
+                          }}
+                          disabled={isLocked || isBlockedByExpiredSA}
+                          data-testid={`input-expense-notes-${index}`}
+                        />
+                      </div>
+                      {!expense.isNew && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            setUploadingExpenseId(expense.id);
+                            fileInputRef.current?.click();
+                          }}
+                          disabled={isLocked || isBlockedByExpiredSA || uploadingExpenseId === expense.id}
+                          data-testid={`button-upload-expense-doc-${index}`}
+                        >
+                          <Upload className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeExpense(index)}
+                        disabled={isLocked || isBlockedByExpiredSA}
+                        data-testid={`button-remove-expense-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    {docs.length > 0 && (
+                      <div className="flex flex-wrap gap-2 ml-1">
+                        {docs.map((doc) => (
+                          <Badge key={doc.id} variant="secondary" className="gap-1">
+                            <FileText className="h-3 w-3" />
+                            <span className="text-xs">
+                              {doc.fileUrl.split("/").pop()?.substring(0, 20) || "Document"}
+                            </span>
+                            {!isLocked && (
+                              <button
+                                onClick={() => deleteExpenseDocMutation.mutate(doc.id)}
+                                className="ml-1"
+                                data-testid={`button-remove-expense-doc-${doc.id}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </Badge>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 grid gap-2">
-                    <Label>Notes</Label>
-                    <Input
-                      placeholder="Notes (optional)"
-                      value={expense.notes}
-                      onChange={(e) => {
-                        const updated = [...expenses];
-                        updated[index].notes = e.target.value;
-                        setExpenses(updated);
-                      }}
-                      disabled={isLocked}
-                      data-testid={`input-expense-notes-${index}`}
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeExpense(index)}
-                    disabled={isLocked}
-                    data-testid={`button-remove-expense-${index}`}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              ))
+                );
+              })
             )}
             <Button
               variant="outline"
               size="sm"
               onClick={addExpense}
-              disabled={isLocked}
+              disabled={isLocked || isBlockedByExpiredSA}
               data-testid="button-add-expense"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Expense
             </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*,.pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && uploadingExpenseId) {
+                  handleExpenseDocUpload(file, uploadingExpenseId);
+                }
+                e.target.value = "";
+              }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -516,7 +668,7 @@ export default function ClientMonthEditPage() {
         <Button asChild variant="outline">
           <Link href={`/clients/${clientId}`}>Cancel</Link>
         </Button>
-        <Button onClick={handleSaveAll} disabled={isLocked} data-testid="button-save-financials">
+        <Button onClick={handleSaveAll} disabled={isLocked || isBlockedByExpiredSA} data-testid="button-save-financials">
           <Save className="mr-2 h-4 w-4" />
           Save All Changes
         </Button>

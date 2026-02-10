@@ -1,0 +1,165 @@
+You are a senior full-stack engineer working on an existing Housing Support Management System.
+Your task is to implement the following feature enhancements cleanly, without breaking existing functionality.
+You must update backend models, APIs, permissions, and frontend forms/pages where applicable.
+All changes must respect audit logging, role-based access (admin vs super_admin), and existing business rules.
+
+---
+
+## 1. Landlord Email Field (Client Housing Details)
+
+### Requirements
+- Add a new field: `landlord_email`
+- This field belongs to the **client housing / landlord details**, alongside:
+  - landlord name
+  - landlord phone
+  - landlord address
+- Field should be:
+  - Optional
+  - Validated as an email format if provided
+
+### Backend
+- Update database schema (Prisma or equivalent) to add `landlord_email`
+- Update create/update client housing APIs
+- Ensure updates are audit-logged
+
+### Frontend
+- Update client onboarding form
+- Update client edit form
+- Display landlord email on the client detail page
+
+---
+
+## 2. Expense Documents Per Month (Proof of Expense)
+
+### Requirements
+- When adding or editing an **expense** for a client month:
+  - Allow uploading one or more documents as proof of expense
+- Documents must be:
+  - Stored under app storage path: `/documents/expenses/`
+  - Linked to:
+    - client
+    - client_month
+    - specific expense record
+- Documents should be labeled with:
+  - expense
+  - month
+  - year
+
+### Backend
+- Extend Expense model to support attached documents
+- Store document metadata:
+  - file path
+  - uploaded_by
+  - uploaded_at
+  - expense_id
+- Enforce access control (admins & super_admins only)
+- Log uploads in audit logs
+
+### Frontend
+- Add file upload option inside the expense creation/edit modal
+- Display uploaded expense documents under that expense entry
+- Allow download (no delete unless super_admin)
+
+---
+
+## 3. New Document Type: Service Agreement (With Dates & Status Logic)
+
+### Requirements
+- Add a new client document type: `Service Agreement`
+- When this document type is selected:
+  - Show additional required fields:
+    - start_date
+    - expiry_date
+
+### Business Logic
+- Service Agreement dates determine **client status automatically**:
+  - If current date is before start_date → status = suspended
+  - If current date is between start_date and expiry_date → status = active
+  - If current date is after expiry_date → status = expired
+- If client status is `expired`:
+  - Financial records (HS, rent, expenses, LTH, bulk updates) are BLOCKED
+  - Client financial pages become read-only
+
+### Super Admin Override
+- Super admin can:
+  - Manually set client status (active / suspended / expired)
+  - Override service agreement date-based status
+- Overrides must:
+  - Be audit-logged
+  - Clearly indicate override source in client record
+
+### Backend
+- Extend ClientDocument model for service agreement metadata
+- Add service agreement evaluation logic
+- Add financial operation guards based on client status
+- Respect super_admin overrides
+
+### Frontend
+- In client documents section:
+  - Selecting “Service Agreement” reveals start & expiry date inputs
+- Show current client status and its source:
+  - automatic (service agreement)
+  - manual override (super admin)
+
+---
+
+## 4. Pool Fund Page – Filter by County
+
+### Requirements
+- Add filtering on the pool fund page by:
+  - county
+- Filter must affect:
+  - individual client pool fund entries
+  - total pooled amount displayed
+  - number of contributors
+
+### Backend
+- Update pool fund queries to support county filtering
+
+### Frontend
+- Add county dropdown filter
+- Update totals dynamically when filter changes
+
+---
+
+## 5. Clients Page – Filter by Service Type
+
+### Requirements
+- Add client filtering by service type:
+  - GRH
+  - LTH
+  - Any service type added by admin
+- Filter must be combinable with:
+  - county
+  - service status
+  - search
+
+### Backend
+- Ensure clients list API supports service_type filtering
+
+### Frontend
+- Add service type dropdown filter
+- Display active filter state clearly
+
+---
+
+## 6. General Rules
+
+- Do NOT remove or break existing features
+- Do NOT bypass audit logging
+- Respect role permissions at all times
+- Ensure validation errors are user-friendly
+- Update migrations safely
+
+---
+
+## 7. Deliverables
+
+After implementation, ensure:
+- Database schema is updated and migrated
+- APIs are tested
+- UI reflects all new fields and rules
+- Financial blocking works correctly for expired clients
+- Super admin overrides function as expected
+
+Proceed carefully and implement step by step.
