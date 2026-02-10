@@ -41,18 +41,32 @@ export async function registerRoutes(
   // Register object storage routes for document uploads
   registerObjectStorageRoutes(app);
 
-  async function createAuditEntry(userId: string | null, actionType: string, entity: string, entityId: string | null, oldData: any, newData: any) {
+  async function createAuditEntry(userId: string | null, actionType: string, entity: string, entityId: string | null, oldData: any, newData: any, meta?: { clientId?: string; clientName?: string }) {
     try {
+      const enrichedOldData = oldData ? { ...oldData, ...(meta || {}) } : oldData;
+      const enrichedNewData = newData ? { ...newData, ...(meta || {}) } : (meta ? meta : null);
       await storage.createAuditLog({
         userId,
         actionType,
         entity,
         entityId,
-        oldData,
-        newData,
+        oldData: enrichedOldData,
+        newData: enrichedNewData,
       });
     } catch (e) {
       console.error("Failed to create audit log:", e);
+    }
+  }
+
+  async function resolveClientFromMonth(clientMonthId: string): Promise<{ clientId: string; clientName: string } | null> {
+    try {
+      const cm = await storage.getClientMonth(clientMonthId);
+      if (!cm) return null;
+      const client = await storage.getClient(cm.clientId);
+      if (!client) return null;
+      return { clientId: client.id, clientName: client.fullName };
+    } catch {
+      return null;
     }
   }
 
@@ -370,21 +384,32 @@ export async function registerRoutes(
             break;
         }
 
+        const bulkClient = await storage.getClient(clientId);
+        const clientMeta = bulkClient ? { clientId: bulkClient.id, clientName: bulkClient.fullName } : undefined;
+        const monthLabel = new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+        await createAuditEntry(
+          req.user?.userId || null,
+          "create",
+          "bulk_update",
+          clientId,
+          null,
+          {
+            financialType,
+            amount: clientAmount,
+            year,
+            month,
+            monthLabel,
+          },
+          clientMeta
+        );
+
         updatedCount++;
       }
 
       await storage.createActivity({
         message: `Bulk ${financialType.replace("_", " ")} update for ${updatedCount} clients - ${new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
         relatedClientId: null,
-      });
-
-      await createAuditEntry(req.user?.userId || null, "create", financialType, null, null, {
-        type: "bulk_update",
-        financialType,
-        year,
-        month,
-        updatedCount,
-        clientIds,
       });
 
       res.json({ success: true, updatedCount });
@@ -1280,7 +1305,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors });
       }
       const document = await storage.createClientDocument(parsed.data);
-      await createAuditEntry(req.user?.userId || null, "create", "document", document.id, null, document);
+      const client = await storage.getClient(document.clientId);
+      const clientMeta = client ? { clientId: client.id, clientName: client.fullName } : undefined;
+      await createAuditEntry(req.user?.userId || null, "create", "document", document.id, null, document, clientMeta);
       if (parsed.data.clientId) {
         await trackClientChange(parsed.data.clientId, "Document Uploaded", null, parsed.data.documentType, req.user?.userId || null);
       }
@@ -1298,7 +1325,9 @@ export async function registerRoutes(
       }
       const oldDoc = await storage.getClientDocumentById(req.params.id as string);
       await storage.deleteClientDocument(req.params.id as string);
-      await createAuditEntry(req.user?.userId || null, "delete", "document", req.params.id as string, oldDoc, null);
+      const docClient = oldDoc?.clientId ? await storage.getClient(oldDoc.clientId) : null;
+      const clientMeta = docClient ? { clientId: docClient.id, clientName: docClient.fullName } : undefined;
+      await createAuditEntry(req.user?.userId || null, "delete", "document", req.params.id as string, oldDoc, null, clientMeta);
       if (oldDoc?.clientId) {
         await trackClientChange(oldDoc.clientId, "Document Deleted", oldDoc.documentType, null, req.user?.userId || null);
       }
@@ -1389,7 +1418,8 @@ export async function registerRoutes(
         }
       }
       const support = await storage.createHousingSupport(parsed.data);
-      await createAuditEntry(req.user?.userId || null, "create", "housing_support", support.id, null, support);
+      const clientMeta = parsed.data.clientMonthId ? await resolveClientFromMonth(parsed.data.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "create", "housing_support", support.id, null, support, clientMeta || undefined);
       if (parsed.data.clientMonthId) {
         const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
         if (clientMonth) {
@@ -1413,7 +1443,8 @@ export async function registerRoutes(
       if (!support) {
         return res.status(404).json({ error: "Housing support not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "housing_support", req.params.id as string, oldSupport, support);
+      const clientMeta = oldSupport ? await resolveClientFromMonth(oldSupport.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "update", "housing_support", req.params.id as string, oldSupport, support, clientMeta || undefined);
       if (oldSupport) {
         const clientMonth = await storage.getClientMonth(oldSupport.clientMonthId);
         if (clientMonth && oldSupport.amount !== support.amount) {
@@ -1454,7 +1485,8 @@ export async function registerRoutes(
         }
       }
       const payment = await storage.createRentPayment(parsed.data);
-      await createAuditEntry(req.user?.userId || null, "create", "rent_payment", payment.id, null, payment);
+      const clientMeta = parsed.data.clientMonthId ? await resolveClientFromMonth(parsed.data.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "create", "rent_payment", payment.id, null, payment, clientMeta || undefined);
       if (parsed.data.clientMonthId) {
         const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
         if (clientMonth) {
@@ -1478,7 +1510,8 @@ export async function registerRoutes(
       if (!payment) {
         return res.status(404).json({ error: "Rent payment not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "rent_payment", req.params.id as string, oldPayment, payment);
+      const clientMeta = oldPayment ? await resolveClientFromMonth(oldPayment.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "update", "rent_payment", req.params.id as string, oldPayment, payment, clientMeta || undefined);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth && oldPayment.paidAmount !== payment.paidAmount) {
@@ -1516,7 +1549,8 @@ export async function registerRoutes(
         }
       }
       const payment = await storage.createLthPayment(parsed.data);
-      await createAuditEntry(req.user?.userId || null, "create", "lth_payment", payment.id, null, payment);
+      const clientMeta = parsed.data.clientMonthId ? await resolveClientFromMonth(parsed.data.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "create", "lth_payment", payment.id, null, payment, clientMeta || undefined);
       if (parsed.data.clientMonthId) {
         const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
         if (clientMonth) {
@@ -1540,7 +1574,8 @@ export async function registerRoutes(
       if (!payment) {
         return res.status(404).json({ error: "LTH payment not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "lth_payment", req.params.id as string, oldPayment, payment);
+      const clientMeta = oldPayment ? await resolveClientFromMonth(oldPayment.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "update", "lth_payment", req.params.id as string, oldPayment, payment, clientMeta || undefined);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth && oldPayment.amount !== payment.amount) {
@@ -1557,7 +1592,8 @@ export async function registerRoutes(
     try {
       const oldPayment = await storage.getLthPaymentById(req.params.id as string);
       await storage.deleteLthPayment(req.params.id as string);
-      await createAuditEntry(req.user?.userId || null, "delete", "lth_payment", req.params.id as string, oldPayment, null);
+      const clientMeta = oldPayment ? await resolveClientFromMonth(oldPayment.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "delete", "lth_payment", req.params.id as string, oldPayment, null, clientMeta || undefined);
       if (oldPayment) {
         const clientMonth = await storage.getClientMonth(oldPayment.clientMonthId);
         if (clientMonth) {
@@ -1595,7 +1631,8 @@ export async function registerRoutes(
         }
       }
       const expense = await storage.createExpense(parsed.data);
-      await createAuditEntry(req.user?.userId || null, "create", "expense", expense.id, null, expense);
+      const clientMeta = parsed.data.clientMonthId ? await resolveClientFromMonth(parsed.data.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "create", "expense", expense.id, null, expense, clientMeta || undefined);
       if (parsed.data.clientMonthId) {
         const clientMonth = await storage.getClientMonth(parsed.data.clientMonthId);
         if (clientMonth) {
@@ -1619,7 +1656,8 @@ export async function registerRoutes(
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }
-      await createAuditEntry(req.user?.userId || null, "update", "expense", req.params.id as string, oldExpense, expense);
+      const clientMeta = oldExpense ? await resolveClientFromMonth(oldExpense.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "update", "expense", req.params.id as string, oldExpense, expense, clientMeta || undefined);
       if (oldExpense) {
         const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
         if (clientMonth && oldExpense.amount !== expense.amount) {
@@ -1636,7 +1674,8 @@ export async function registerRoutes(
     try {
       const oldExpense = await storage.getExpenseById(req.params.id as string);
       await storage.deleteExpense(req.params.id as string);
-      await createAuditEntry(req.user?.userId || null, "delete", "expense", req.params.id as string, oldExpense, null);
+      const clientMeta = oldExpense ? await resolveClientFromMonth(oldExpense.clientMonthId) : null;
+      await createAuditEntry(req.user?.userId || null, "delete", "expense", req.params.id as string, oldExpense, null, clientMeta || undefined);
       if (oldExpense) {
         const clientMonth = await storage.getClientMonth(oldExpense.clientMonthId);
         if (clientMonth) {

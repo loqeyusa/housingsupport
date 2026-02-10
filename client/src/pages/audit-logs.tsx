@@ -49,15 +49,23 @@ export default function AuditLogsPage() {
   const uniqueEntities = [...new Set(auditLogs?.map((log) => log.entity) || [])];
   const uniqueActions = [...new Set(auditLogs?.map((log) => log.actionType) || [])];
 
+  const getLogClientName = (log: AuditLog): string | null => {
+    const data = (log.newData || log.oldData) as Record<string, unknown> | null;
+    if (!data) return null;
+    return (data.clientName as string) || null;
+  };
+
   const filteredLogs = auditLogs?.filter((log) => {
     const matchesUser = userFilter === "all" || log.userId === userFilter;
     const matchesEntity = entityFilter === "all" || log.entity === entityFilter;
     const matchesAction = actionFilter === "all" || log.actionType === actionFilter;
+    const clientName = getLogClientName(log);
     const matchesSearch =
       !search ||
       log.entity.toLowerCase().includes(search.toLowerCase()) ||
       log.actionType.toLowerCase().includes(search.toLowerCase()) ||
-      (log.entityId && log.entityId.includes(search));
+      (log.entityId && log.entityId.includes(search)) ||
+      (clientName && clientName.toLowerCase().includes(search.toLowerCase()));
 
     return matchesUser && matchesEntity && matchesAction && matchesSearch;
   });
@@ -100,14 +108,46 @@ export default function AuditLogsPage() {
     month: "Month",
     isLocked: "Locked",
     clientId: "Client",
+    financialType: "Financial Type",
+    monthLabel: "Period",
+    paidAmount: "Paid Amount",
+    type: "Type",
   };
 
-  const HIDDEN_FIELDS = new Set(["id", "clientMonthId", "password"]);
+  const HIDDEN_FIELDS = new Set(["id", "clientMonthId", "password", "clientId", "clientName"]);
+
+  const getEntityLabel = (entity: string): string => {
+    const labels: Record<string, string> = {
+      client: "Client",
+      housing_support: "Housing Support",
+      rent_payment: "Rent Payment",
+      lth_payment: "LTH Payment",
+      expense: "Expense",
+      document: "Document",
+      bulk_update: "Bulk Update",
+      user: "User",
+      county: "County",
+      service_type: "Service Type",
+      service_status: "Service Status",
+      payment_method: "Payment Method",
+      expense_category: "Expense Category",
+    };
+    return labels[entity] || entity;
+  };
 
   const formatFieldValue = (key: string, value: unknown): string => {
     if (value === null || value === undefined) return "-";
-    if (key === "amount" || key === "rentAmount") return `$${value}`;
+    if (key === "amount" || key === "rentAmount" || key === "paidAmount") return `$${value}`;
     if (key === "isActive" || key === "isLocked") return value ? "Yes" : "No";
+    if (key === "financialType") {
+      const typeLabels: Record<string, string> = {
+        housing_support: "Housing Support",
+        rent: "Rent",
+        expense: "Expense",
+        lth: "LTH",
+      };
+      return typeLabels[String(value)] || String(value);
+    }
     if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)) {
       return new Date(value).toLocaleDateString();
     }
@@ -235,8 +275,8 @@ export default function AuditLogsPage() {
                     <TableHead>Timestamp</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Action</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>Entity ID</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Client</TableHead>
                     <TableHead className="text-right">Details</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -252,9 +292,9 @@ export default function AuditLogsPage() {
                           {log.actionType}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{log.entity}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {log.entityId ? `${log.entityId.slice(0, 8)}...` : "-"}
+                      <TableCell className="font-medium">{getEntityLabel(log.entity)}</TableCell>
+                      <TableCell className="text-sm">
+                        {getLogClientName(log) || <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell className="text-right">
                         <Dialog>
@@ -267,7 +307,7 @@ export default function AuditLogsPage() {
                             <DialogHeader>
                               <DialogTitle>Audit Log Details</DialogTitle>
                               <DialogDescription>
-                                {log.actionType} on {log.entity} by {getUserName(log.userId)}
+                                {log.actionType} on {getEntityLabel(log.entity)} by {getUserName(log.userId)}
                               </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
@@ -277,8 +317,18 @@ export default function AuditLogsPage() {
                                   <p>{new Date(log.createdAt).toLocaleString()}</p>
                                 </div>
                                 <div>
-                                  <Label className="text-muted-foreground">Entity ID</Label>
-                                  <p className="font-mono text-xs break-all">{log.entityId || "-"}</p>
+                                  <Label className="text-muted-foreground">Admin</Label>
+                                  <p>{getUserName(log.userId)}</p>
+                                </div>
+                                {getLogClientName(log) && (
+                                  <div>
+                                    <Label className="text-muted-foreground">Client</Label>
+                                    <p className="font-medium">{getLogClientName(log)}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <Label className="text-muted-foreground">Type</Label>
+                                  <p>{getEntityLabel(log.entity)}</p>
                                 </div>
                               </div>
 
