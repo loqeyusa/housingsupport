@@ -48,6 +48,7 @@ function ProtectedRoute({
   return <Component />;
 }
 
+
 function PublicRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
 
